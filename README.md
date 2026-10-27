@@ -6,6 +6,8 @@ Apresentação interativa sobre MongoDB: inserção, alteração e schemas, com 
 
 Não precisa instalar nada: é um único arquivo HTML, CSS e JS ([mongodb.html](mongodb.html)). Também funciona abrindo o arquivo direto no navegador.
 
+**Roteiro de quem apresenta:** [roteiro.md](roteiro.md)
+
 ## Atalhos
 
 | Tecla | O que faz |
