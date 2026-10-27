@@ -1,0 +1,2588 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MongoDB ao Vivo</title>
+<meta name="description" content="Apresentação interativa em tela cheia sobre manipulação de dados no MongoDB: inserção, alteração e schemas, com simulador embutido.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* 1u = 1% da largura num quadro 16:9 — tudo escala com a TV */
+  --u:min(1vw,1.7778vh);
+  --bg:#05070d; --bg2:#0a0e18;
+  --panel:#0d1117; --panel2:#141c2b; --line:#2a3650;
+  --ink:#f6f9ff; --mut:#a9b8cf;
+  --green:#00ED64; --cyan:#22d3ee; --amber:#fbbf24; --pink:#fb7185;
+  --purple:#d2a8ff; --orange:#ffa657; --blue:#79c0ff;
+  --accent:var(--green);
+  --disp:"Space Grotesk",system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,"DejaVu Sans Mono",monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:var(--disp); background:var(--bg); color:var(--ink);
+  height:100vh; width:100vw; overflow:hidden; cursor:default;
+  -webkit-font-smoothing:antialiased;
+}
+body.idle{cursor:none}
+b{color:var(--ink)}
+
+/* ambient background */
+#amb{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none}
+#amb .blob{position:absolute;border-radius:50%;filter:blur(90px);opacity:.3;mix-blend-mode:screen;animation:float 22s ease-in-out infinite}
+#amb .b1{width:52vw;height:52vw;left:-12vw;top:-16vw;background:radial-gradient(circle,var(--green),transparent 68%)}
+#amb .b2{width:46vw;height:46vw;right:-14vw;top:18vh;background:radial-gradient(circle,var(--cyan),transparent 68%);animation-delay:-7s}
+#amb .b3{width:40vw;height:40vw;left:22vw;bottom:-18vw;background:radial-gradient(circle,var(--accent),transparent 68%);animation-delay:-13s;transition:background .8s}
+#amb .grid{position:absolute;inset:0;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:64px 64px;opacity:.05;mask-image:radial-gradient(circle at 50% 50%,#000,transparent 85%)}
+@keyframes float{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(3vw,-3vh) scale(1.08)}66%{transform:translate(-2vw,2vh) scale(.95)}}
+
+/* floating brackets */
+.brk{position:fixed;font-family:var(--mono);color:var(--accent);opacity:.06;z-index:0;user-select:none;pointer-events:none;font-weight:700;transition:color .8s}
+.brk.a{top:12vh;left:6vw;font-size:14vw;animation:drift 19s ease-in-out infinite}
+.brk.b{bottom:8vh;right:7vw;font-size:12vw;animation:drift 23s ease-in-out infinite reverse}
+@keyframes drift{0%,100%{transform:translateY(0) rotate(0)}50%{transform:translateY(-3vh) rotate(6deg)}}
+
+/* stage */
+#stage{position:relative;z-index:2;height:100vh;width:100vw}
+.scene{position:absolute;inset:0;display:none;flex-direction:column;justify-content:center;
+  padding:calc(var(--u)*4) calc(var(--u)*5.5);gap:calc(var(--u)*1.8)}
+.scene.tight{padding:calc(var(--u)*2.6) calc(var(--u)*4);gap:calc(var(--u)*1.4)}
+.scene.active{display:flex;animation:sceneIn .7s ease both}
+@keyframes sceneIn{from{opacity:0}to{opacity:1}}
+
+/* fragments */
+.frag{opacity:0;transform:translateY(48px) scale(.985);
+  transition:opacity .72s cubic-bezier(.2,.85,.25,1),transform .72s cubic-bezier(.2,.85,.25,1),filter .72s ease}
+.frag.show{opacity:1;transform:none;filter:none}
+[data-anim=left]{transform:translateX(-90px)}
+[data-anim=right]{transform:translateX(90px)}
+[data-anim=down]{transform:translateY(-52px)}
+[data-anim=zoom]{transform:scale(.55)}
+[data-anim=blur]{filter:blur(16px)}
+[data-anim=flip]{transform:perspective(900px) rotateX(82deg);transform-origin:top}
+[data-anim=pop]{transform:scale(.3);transition-timing-function:cubic-bezier(.34,1.56,.64,1)}
+.frag.stagger{opacity:1;transform:none}
+.stagger>*{opacity:0;transform:translateY(34px) scale(.92);transition:opacity .5s ease,transform .6s cubic-bezier(.34,1.45,.64,1)}
+.stagger.show>*{opacity:1;transform:none}
+.stagger>*:nth-child(2){transition-delay:.12s}.stagger>*:nth-child(3){transition-delay:.24s}
+.stagger>*:nth-child(4){transition-delay:.36s}.stagger>*:nth-child(5){transition-delay:.48s}
+.stagger>*:nth-child(6){transition-delay:.6s}
+
+/* type scale (pensado pra TV 45" a 5,5 m) */
+.kicker{font-family:var(--mono);font-weight:700;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--accent);font-size:calc(var(--u)*1.9)}
+.huge{font-weight:700;line-height:.95;font-size:calc(var(--u)*9.5);letter-spacing:-.02em}
+.big{font-weight:700;line-height:1.02;font-size:calc(var(--u)*6);letter-spacing:-.01em}
+.mid{font-weight:700;font-size:calc(var(--u)*4.2);line-height:1.1}
+.lead{font-size:calc(var(--u)*3);color:var(--mut);line-height:1.3;max-width:32ch}
+.note{font-family:var(--mono);color:var(--mut);font-size:calc(var(--u)*2.5);line-height:1.35}
+.sit{font-weight:700;font-size:calc(var(--u)*4.8);line-height:1.12;max-width:26ch}
+.mono{font-family:var(--mono)}
+.glow{color:var(--accent);text-shadow:0 0 38px color-mix(in srgb,var(--accent) 55%,transparent)}
+.under{height:7px;width:calc(var(--u)*10);background:var(--accent);border-radius:99px;box-shadow:0 0 30px var(--accent)}
+.c-green{color:var(--green)}.c-cyan{color:var(--cyan)}.c-amber{color:var(--amber)}
+.c-pink{color:var(--pink)}.c-blue{color:var(--blue)}.c-purple{color:var(--purple)}.c-orange{color:var(--orange)}
+.c-mut{color:var(--mut)}
+
+/* code window */
+.win{background:linear-gradient(180deg,#0c1016,#0a0d13);border:1px solid var(--line);border-radius:18px;
+  overflow:hidden;box-shadow:0 40px 90px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.02) inset;max-width:100%}
+.bar{display:flex;align-items:center;gap:.6em;padding:.55em 1em;background:#11161f;border-bottom:1px solid var(--line);font-size:calc(var(--u)*1.35)}
+.bar .dot{width:.85em;height:.85em;border-radius:50%;flex:none}
+.dot.r{background:#ff5f56}.dot.y{background:#ffbd2e}.dot.g{background:#27c93f}
+.bar .lbl{margin-left:auto;margin-right:auto;font-family:var(--mono);color:#8796ad}
+.code{font-family:var(--mono);font-size:calc(var(--u)*2.45);line-height:1.42;padding:.65em 1.1em;
+  white-space:pre;overflow:hidden;color:#c9d1d9}
+.code.s{font-size:calc(var(--u)*2.1)}
+.code.xs{font-size:calc(var(--u)*1.85)}
+.code.xxs{font-size:calc(var(--u)*1.7)}
+.code .ln{display:block;padding:0 .5em;margin:0 -.5em;border-radius:.25em;
+  transition:opacity .45s ease,background .45s ease,box-shadow .45s ease}
+.code.focus .ln{opacity:.2}
+.code.focus .ln.on{opacity:1;background:color-mix(in srgb,var(--accent) 14%,transparent);box-shadow:inset .22em 0 0 var(--accent)}
+.t-m{color:var(--amber);font-weight:700}.t-o{color:var(--green);font-weight:700}
+.t-k{color:var(--blue)}.t-s{color:var(--orange)}.t-b{color:var(--purple)}
+.t-n{color:var(--cyan)}.t-c{color:#6b7a92;font-style:italic}.t-p{color:#8b98ac}.t-d{color:#dbe3ee}
+.t-f{color:#ff8fc7}
+.ty{font-size:.55em;vertical-align:super;color:var(--cyan);margin-left:.15em;font-weight:700;opacity:.85}
+
+/* code + explicação linha a linha */
+.codex{display:flex;flex-direction:column;gap:calc(var(--u)*1.6)}
+.explain{position:relative;min-height:calc(var(--u)*10.5)}
+.ex{position:absolute;left:0;right:0;top:0;font-size:calc(var(--u)*2.75);line-height:1.3;color:var(--mut);
+  padding:.45em .8em;border-left:.3em solid var(--accent);background:rgba(13,17,23,.78);border-radius:0 .5em .5em 0}
+.ex em,.say em{font-style:normal;color:var(--accent);font-weight:700}
+.ex code,.say code,.note code{font-family:var(--mono);color:var(--ink);background:#141c2b;padding:0 .3em;border-radius:.25em;font-size:.92em}
+.frag.past{opacity:0;transform:translateY(-26px);pointer-events:none}
+.codex.side{display:grid;grid-template-columns:auto 1fr;align-items:stretch}
+.codex.side .explain{min-height:0}
+.codex.side .ex{font-size:calc(var(--u)*2.45)}
+
+/* simulador */
+.sim{display:grid;grid-template-columns:1fr 1fr;gap:calc(var(--u)*1.6);height:calc(var(--u)*32);min-height:0}
+.sim.tw{grid-template-columns:1.3fr 1fr}
+.sim.chips{grid-template-columns:1.8fr 1fr}
+.sim.cw{grid-template-columns:1fr 1.3fr}
+.sim.tall{height:calc(var(--u)*36)}
+.term,.coll{background:rgba(7,10,16,.92);border:1px solid var(--line);border-radius:16px;overflow:hidden;
+  display:flex;flex-direction:column;min-height:0;box-shadow:0 30px 70px rgba(0,0,0,.5)}
+.coll .bar .lbl{margin-left:0;color:var(--ink);font-weight:700}
+.coll .bar .cnt{margin-left:auto;font-family:var(--mono);color:var(--accent)}
+.scr{flex:1;min-height:0;overflow:hidden;font-family:var(--mono);font-size:calc(var(--u)*var(--tfs,1.9));
+  line-height:1.42;padding:.6em .9em;white-space:pre-wrap;word-break:break-word;color:#c9d1d9}
+.scr .pr{color:var(--green);font-weight:700}
+.scr .cur{display:inline-block;width:.55em;height:1.05em;background:var(--green);vertical-align:-.15em;animation:blink 1s steps(1) infinite;margin-left:.05em}
+@keyframes blink{50%{opacity:0}}
+.scr .res{display:block;margin-top:.45em;animation:resIn .45s ease both}
+.scr .res .e1{color:var(--pink);font-weight:700}
+.scr .res .e2{color:var(--mut)}
+@keyframes resIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.docs{flex:1;min-height:0;overflow:hidden;padding:.7em;display:flex;flex-direction:column;gap:.55em;
+  font-family:var(--mono);font-size:calc(var(--u)*var(--cfs,1.8))}
+.coll.chips .docs{flex-direction:row;flex-wrap:wrap;align-content:flex-start;font-size:calc(var(--u)*2.4)}
+.coll.scroll .docs{overflow:auto}
+.empty{color:#56647a;font-style:italic;padding:.4em}
+.doc{background:#0f1622;border:1px solid var(--line);border-left:.25em solid var(--accent);border-radius:.5em;padding:.35em .7em;line-height:1.42}
+.doc .f{display:block;white-space:pre-wrap;word-break:break-word;border-radius:.2em;padding:0 .2em;margin:0 -.2em}
+.doc.chip{padding:.3em .7em;border-left-width:.2em;font-weight:700;color:var(--ink)}
+.doc.new{animation:docIn .8s cubic-bezier(.2,.9,.3,1.25) both,glowIn 2.2s ease}
+.f.chg,.f.add,td.chg{animation:chg 2.4s ease}
+.f.del{color:var(--pink);text-decoration:line-through;opacity:.8;animation:delIn .6s ease both}
+.doc.hit{animation:hit 1.1s ease;border-color:var(--pink);border-left-color:var(--pink)}
+@keyframes docIn{from{opacity:0;transform:translateX(40px) scale(.9)}to{opacity:1;transform:none}}
+@keyframes glowIn{0%{box-shadow:0 0 0 3px var(--green),0 0 40px var(--green)}100%{box-shadow:none}}
+@keyframes chg{0%{background:color-mix(in srgb,var(--green) 50%,transparent)}100%{background:transparent}}
+@keyframes delIn{from{opacity:1;background:color-mix(in srgb,var(--pink) 45%,transparent)}to{opacity:.8}}
+@keyframes hit{0%,100%{transform:none}20%{transform:translateX(-10px)}40%{transform:translateX(10px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}
+.tbl{border-collapse:collapse;width:100%}
+.tbl th{color:var(--mut);font-weight:400;text-align:left;font-size:.78em;padding:.15em .55em .35em;border-bottom:1px solid var(--line)}
+.tbl td{padding:.3em .55em;border-bottom:1px solid #1a2333;white-space:nowrap}
+.tbl tr.new td{animation:rowIn .8s ease both,chg 2.4s ease}
+.tbl tr.hit td{animation:hitRow 1.2s ease}
+.tbl .none{color:#4a5870}
+.tbl .del{color:var(--pink);text-decoration:line-through}
+@keyframes rowIn{from{opacity:0}to{opacity:1}}
+@keyframes hitRow{0%,60%{background:color-mix(in srgb,var(--pink) 40%,transparent)}100%{background:transparent}}
+
+/* falas que aparecem embaixo do simulador (uma por vez) */
+.says{position:relative;height:calc(var(--u)*9)}
+.say{position:absolute;left:0;right:0;top:0;font-size:calc(var(--u)*2.6);line-height:1.3;color:var(--mut);
+  padding:.4em .8em;border-left:.3em solid var(--accent);background:rgba(13,17,23,.8);border-radius:0 .5em .5em 0}
+
+/* layout helpers */
+.row{display:flex;gap:calc(var(--u)*2.6);align-items:center;flex-wrap:wrap}
+.row.top{align-items:flex-start}
+.row.st{align-items:stretch}
+.col{display:flex;flex-direction:column;gap:calc(var(--u)*1.4)}
+.grow{flex:1 1 0;min-width:0}
+.scene.mid-center{justify-content:center;align-items:center;text-align:center}
+
+/* cards */
+.card{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);
+  border-radius:20px;padding:calc(var(--u)*2.2);position:relative;overflow:hidden}
+.card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:7px;background:var(--accent);box-shadow:0 0 26px var(--accent)}
+.card .num{font-family:var(--mono);font-size:calc(var(--u)*4);font-weight:700;color:var(--accent);line-height:1}
+.card h3{font-size:calc(var(--u)*3);margin:.2em 0 .25em}
+.card p{color:var(--mut);font-size:calc(var(--u)*2.15);line-height:1.3}
+
+/* comparison panel */
+.panel{flex:1 1 0;min-width:0;background:linear-gradient(180deg,var(--panel2),var(--panel));
+  border:1px solid var(--line);border-radius:22px;padding:calc(var(--u)*2.4)}
+.panel .tag{font-family:var(--mono);font-weight:700;font-size:calc(var(--u)*3)}
+.panel .desc{color:var(--mut);font-size:calc(var(--u)*2.4);line-height:1.38;margin-top:.5em}
+
+/* big number term */
+.numterm{display:flex;align-items:baseline;gap:calc(var(--u)*3)}
+.numterm .n{font-family:var(--mono);font-weight:700;font-size:calc(var(--u)*16);line-height:.8;color:var(--accent);text-shadow:0 0 50px color-mix(in srgb,var(--accent) 45%,transparent)}
+
+/* pill row */
+.pills{display:flex;flex-wrap:wrap;gap:calc(var(--u)*1.2)}
+.pill{font-family:var(--mono);font-weight:700;font-size:calc(var(--u)*2.4);
+  padding:.45em .85em;border-radius:14px;border:1px solid var(--line);background:#0e1420}
+.pill b{color:var(--green)}
+
+.vs{font-family:var(--mono);font-weight:700;font-size:calc(var(--u)*3.2);color:var(--mut);padding:0 .3em;align-self:center}
+
+/* arrow map */
+.map{display:flex;flex-direction:column;gap:calc(var(--u)*1.6)}
+.map .pair{display:flex;align-items:center;gap:calc(var(--u)*2.4);font-weight:700;font-size:calc(var(--u)*4)}
+.map .from{color:var(--mut);min-width:5.2em}
+.map .arr{color:var(--accent);font-family:var(--mono)}
+.map .to{color:var(--ink);font-family:var(--mono)}
+
+/* ObjectId */
+.oid{font-family:var(--mono);font-weight:700;font-size:calc(var(--u)*5.6);letter-spacing:.02em}
+.oid .g1{color:var(--amber)}.oid .g2{color:var(--purple)}.oid .g3{color:var(--cyan)}
+.oidcap{display:flex;align-items:center;gap:.6em;font-size:calc(var(--u)*2.7)}
+.oidcap .sw{width:1em;height:1em;border-radius:.25em;flex:none}
+
+/* corrida */
+.race{display:flex;flex-direction:column;gap:calc(var(--u)*.6);font-family:var(--mono);font-size:calc(var(--u)*2.5)}
+.race .rr{display:grid;grid-template-columns:1fr 1fr 7em;gap:1em;padding:.3em .6em;border-radius:.4em;background:rgba(20,28,43,.65);border:1px solid var(--line)}
+.race .rr.h{background:none;border-color:transparent;color:var(--mut);font-size:.72em;letter-spacing:.15em;text-transform:uppercase}
+.race .rr b{text-align:center;color:var(--amber)}
+.race .ca{color:var(--cyan)}.race .cb{color:var(--purple)}
+
+/* resposta dos casos */
+.ans{display:inline-flex;align-self:flex-start;font-family:var(--mono);font-weight:700;font-size:calc(var(--u)*4);
+  padding:.32em .7em;border-radius:.4em;background:color-mix(in srgb,var(--accent) 15%,transparent);
+  border:2px solid var(--accent);color:var(--accent);box-shadow:0 0 50px color-mix(in srgb,var(--accent) 30%,transparent)}
+.ans.alt{--accent:var(--cyan)}
+.case-n{font-family:var(--mono);color:var(--mut);font-size:calc(var(--u)*1.9);letter-spacing:.2em}
+
+/* passos (estratégia) */
+.steps{display:flex;gap:calc(var(--u)*1.2);align-items:stretch}
+.steps>div{flex:1;background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:20px;padding:calc(var(--u)*2)}
+.steps .k{font-family:var(--mono);font-weight:700;font-size:calc(var(--u)*2.7)}
+.steps p{color:var(--mut);font-size:calc(var(--u)*2.2);margin-top:.4em;line-height:1.3}
+.steps .arrow{flex:0 0 auto;background:none;border:none;padding:0;align-self:center;font-size:calc(var(--u)*4);color:var(--accent)}
+
+/* cola */
+.cheat{display:flex;flex-direction:column;gap:calc(var(--u)*.55)}
+.cheat .cr{display:grid;grid-template-columns:1fr 1fr;gap:1em;align-items:center;font-size:calc(var(--u)*2.35);
+  padding:.28em .7em;border-radius:.4em;background:rgba(20,28,43,.65);border:1px solid var(--line)}
+.cheat .cr span{color:var(--mut)}
+.cheat .cr code{font-family:var(--mono);font-weight:700;color:var(--accent)}
+.cheat .grp{display:flex;flex-direction:column;gap:calc(var(--u)*.55)}
+
+/* playground */
+.pg{display:flex;gap:calc(var(--u)*1);align-items:stretch}
+.pg textarea{flex:1;font-family:var(--mono);font-size:calc(var(--u)*1.9);background:#070a10;color:var(--ink);
+  border:2px solid var(--line);border-radius:14px;padding:.45em .7em;resize:none;height:calc(var(--u)*6.4);outline:none}
+.pg textarea:focus{border-color:var(--accent);box-shadow:0 0 30px color-mix(in srgb,var(--accent) 30%,transparent)}
+.pg .chs{display:grid;grid-template-columns:1fr 1fr;gap:calc(var(--u)*.5)}
+.pg button{font-family:var(--mono);font-size:calc(var(--u)*1.45);color:var(--ink);background:#141c2b;border:1px solid var(--line);
+  border-radius:10px;padding:.3em .7em;cursor:pointer}
+.pg button:hover{border-color:var(--accent);color:var(--accent)}
+.pg button.send{flex:none;font-family:var(--disp);font-weight:700;font-size:calc(var(--u)*2.1);padding:0 1em;
+  color:#021a0c;background:var(--green);border-color:var(--green);box-shadow:0 0 26px rgba(0,237,100,.35)}
+.pg button.send:hover{color:#021a0c;filter:brightness(1.12)}
+
+/* progress */
+#prog{position:fixed;left:0;top:0;height:5px;width:0;background:linear-gradient(90deg,var(--accent),var(--cyan));
+  z-index:40;box-shadow:0 0 16px var(--accent);transition:width .5s cubic-bezier(.2,.8,.2,1)}
+
+/* controles escondidos: abrem pelo botãozinho apagado no canto inferior esquerdo */
+#navbtn{position:fixed;left:14px;bottom:14px;z-index:51;width:40px;height:40px;border-radius:50%;
+  font-size:18px;color:var(--ink);background:rgba(20,28,43,.7);border:1px solid var(--line);cursor:pointer;
+  opacity:.14;transition:opacity .25s,border-color .25s}
+#navbtn:hover,#navbtn.on{opacity:1;border-color:var(--accent);color:var(--accent)}
+body.idle #navbtn:not(.on){opacity:0}
+#controls{position:fixed;left:64px;bottom:14px;transform:translateX(-30px);opacity:0;pointer-events:none;z-index:50;
+  display:flex;align-items:center;gap:8px;padding:8px 11px;border-radius:16px;
+  background:rgba(10,14,22,.86);backdrop-filter:blur(12px);border:1px solid var(--line);
+  box-shadow:0 20px 50px rgba(0,0,0,.6);transition:transform .3s cubic-bezier(.2,.8,.2,1),opacity .25s}
+#controls.show{transform:none;opacity:1;pointer-events:auto}
+#controls button{font-family:var(--mono);font-size:17px;color:var(--ink);background:#141c2b;border:1px solid var(--line);
+  border-radius:10px;padding:8px 12px;cursor:pointer;transition:.15s}
+#controls button:hover{background:#1d283c;border-color:var(--accent);color:var(--accent)}
+#controls .count{font-family:var(--mono);color:var(--mut);font-size:17px;padding:0 10px;white-space:nowrap}
+
+/* overlays */
+.ovl{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;
+  background:rgba(4,6,11,.88);backdrop-filter:blur(6px)}
+.ovl.show{display:flex}
+.ovl .box{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:40px;max-width:min(92vw,1300px);max-height:88vh;overflow:auto}
+.ovl h2{font-size:30px;margin-bottom:18px;color:var(--accent)}
+#help ul{list-style:none;display:grid;gap:12px}
+#help li{display:flex;gap:16px;font-size:20px;color:var(--mut);align-items:center}
+#help kbd{font-family:var(--mono);background:#141c2b;border:1px solid var(--line);border-radius:8px;
+  padding:3px 10px;color:var(--ink);min-width:3.2em;text-align:center}
+#ov .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px}
+#ov button{font-family:var(--mono);font-size:15px;text-align:left;color:var(--mut);background:#111826;border:1px solid var(--line);border-radius:10px;padding:9px 12px;cursor:pointer}
+#ov button:hover,#ov button.cur{color:var(--accent);border-color:var(--accent)}
+
+#scenetag{position:fixed;top:18px;right:22px;z-index:40;font-family:var(--mono);color:var(--mut);
+  font-size:17px;opacity:0;transition:opacity .3s}
+#scenetag.show{opacity:.75}
+#timer{position:fixed;top:14px;left:18px;z-index:40;font-family:var(--mono);font-size:18px;color:var(--mut);
+  background:rgba(10,14,22,.85);border:1px solid var(--line);border-radius:10px;padding:6px 12px;display:none}
+#timer.show{display:block}
+#timer b{color:var(--accent)}
+
+/* resposta do MongoDB: bloco separado do comando */
+.scr .res{margin-top:.6em;padding:.3em .7em .45em;border-radius:.45em;
+  background:rgba(0,237,100,.07);border:1px solid rgba(0,237,100,.35);border-left:.28em solid var(--green)}
+.scr .res::before{content:"↩ resposta do MongoDB";display:block;font-family:var(--disp);font-weight:700;font-size:.66em;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--green);margin-bottom:.15em}
+.scr .res.err{background:rgba(251,113,133,.09);border-color:rgba(251,113,133,.45);border-left-color:var(--pink)}
+.scr .res.err::before{content:"✖ erro do MongoDB";color:var(--pink)}
+
+/* hierarquia: servidor ⊃ database ⊃ collection ⊃ document */
+.hier .lv{border:3px solid var(--lc);border-radius:18px;background:color-mix(in srgb,var(--lc) 9%,rgba(8,11,18,.88));
+  padding:calc(var(--u)*.9) calc(var(--u)*1.3);box-shadow:0 0 44px color-mix(in srgb,var(--lc) 28%,transparent)}
+.hier .lh{display:flex;align-items:baseline;gap:.7em;margin-bottom:calc(var(--u)*.6);flex-wrap:wrap}
+.hier .lh b{font-family:var(--mono);color:var(--lc);letter-spacing:.12em;font-size:calc(var(--u)*2.3)}
+.hier .lh span{color:var(--ink);font-size:calc(var(--u)*2.2)}
+.hier .lh i{font-style:normal;font-family:var(--mono);color:var(--mut);font-size:calc(var(--u)*1.7)}
+.hier .srv{--lc:var(--purple)}.hier .db{--lc:var(--amber)}.hier .col{--lc:var(--cyan);flex:1}
+.hier .cols{display:flex;gap:calc(var(--u)*1.2)}
+.dks{display:flex;gap:.5em;flex-wrap:wrap}
+.dk{font-style:normal;font-family:var(--mono);font-weight:700;font-size:calc(var(--u)*2.3);color:var(--green);
+  border:2px solid var(--green);border-radius:.4em;padding:.1em .45em;background:rgba(0,237,100,.12);
+  opacity:0;transform:scale(.3);transition:opacity .4s ease,transform .5s cubic-bezier(.34,1.56,.64,1)}
+.dk.lit{opacity:1;transform:none;box-shadow:0 0 22px rgba(0,237,100,.45)}
+.dks .dk:nth-child(2){transition-delay:.1s}.dks .dk:nth-child(3){transition-delay:.2s}
+.map2{display:flex;gap:calc(var(--u)*1.2);flex-wrap:wrap}
+.map2 span{font-size:calc(var(--u)*2.15);padding:.35em .8em;border-radius:12px;border:2px solid var(--c);
+  background:color-mix(in srgb,var(--c) 12%,transparent);color:var(--ink)}
+.map2 code{font-family:var(--mono);font-weight:700;color:var(--c)}
+
+/* anatomia do documento: cada parte acende numa cor */
+.anatcode{color:#4a576c}
+.mk{border-radius:.2em;transition:color .5s,background .5s,box-shadow .5s;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.mk.lit{color:var(--mc);background:color-mix(in srgb,var(--mc) 15%,transparent);
+  box-shadow:0 0 0 2px color-mix(in srgb,var(--mc) 75%,transparent),0 0 26px color-mix(in srgb,var(--mc) 40%,transparent)}
+.mk.lit .mk:not(.lit){color:inherit}
+.tyb{display:none;font-family:var(--disp);font-size:.56em;font-weight:700;vertical-align:.3em;margin-left:.4em;
+  padding:.05em .45em;border-radius:.35em;background:var(--cyan);color:#021014}
+.tyb.lit{display:inline-block;animation:popIn .55s cubic-bezier(.34,1.56,.64,1) both}
+@keyframes popIn{from{transform:scale(.2);opacity:0}to{transform:none;opacity:1}}
+
+/* cola de bolso */
+.cg{display:grid;grid-template-columns:1fr 1fr;gap:calc(var(--u)*.7) calc(var(--u)*1.4)}
+.ci{background:rgba(20,28,43,.72);border:1px solid var(--line);border-left:.25em solid var(--accent);border-radius:.45em;padding:.3em .7em .4em}
+.ci .op{font-family:var(--mono);font-weight:700;color:var(--accent);font-size:calc(var(--u)*2.2)}
+.ci .ds{color:var(--ink);font-size:calc(var(--u)*2.05);margin-left:.45em}
+.ci code{display:block;font-family:var(--mono);font-size:calc(var(--u)*1.8);margin-top:.1em;white-space:pre-wrap;color:#c9d1d9}
+.stagger>*:nth-child(7){transition-delay:.72s}.stagger>*:nth-child(8){transition-delay:.84s}
+.stagger>*:nth-child(9){transition-delay:.96s}.stagger>*:nth-child(10){transition-delay:1.08s}
+
+/* erros clássicos */
+.errs{display:flex;flex-direction:column;gap:calc(var(--u)*.8)}
+.er{background:rgba(20,28,43,.72);border:1px solid rgba(251,113,133,.35);border-radius:.5em;padding:.25em .8em .35em}
+.er .et{font-weight:700;font-size:calc(var(--u)*2.35);color:var(--pink)}
+.er .et span{color:var(--mut);font-weight:400;font-size:.85em;margin-left:.4em}
+.er .ln2{font-family:var(--mono);font-size:calc(var(--u)*1.95);margin-top:.15em;white-space:pre-wrap}
+.er .bad{color:var(--pink)}.er .bad::before{content:"✖ ";font-weight:700}
+.er .good{color:var(--green)}.er .good::before{content:"✔ ";font-weight:700}
+
+/* playground: botões de erro + explicação */
+.pg .chs{grid-template-columns:repeat(4,auto)}
+.pg button.bad{color:var(--pink);border-color:rgba(251,113,133,.55);background:rgba(251,113,133,.1)}
+.pg button.bad:hover{color:#fff;border-color:var(--pink)}
+.pg-why{min-height:calc(var(--u)*4.6);font-size:calc(var(--u)*2.15);line-height:1.3;color:var(--mut);padding:.35em .8em;
+  border-left:.3em solid var(--line);background:rgba(13,17,23,.8);border-radius:0 .5em .5em 0}
+.pg-why.bad{border-left-color:var(--pink);color:var(--ink)}
+.pg-why.bad b{color:var(--pink)}.pg-why em{font-style:normal;color:var(--green);font-weight:700}
+.pg-why code{font-family:var(--mono);background:#141c2b;padding:0 .3em;border-radius:.25em}
+/* tela do playground: sem título, terminal e collection ocupam quase tudo */
+.scene.pgscene{padding:calc(var(--u)*1.4) calc(var(--u)*2);gap:calc(var(--u)*.9);justify-content:flex-start}
+.sim.play{height:auto;flex:1 1 auto;grid-template-columns:1.1fr 1fr;--tfs:2.3;--cfs:2.2}
+.pgscene .bar{font-size:calc(var(--u)*1.6)}
+.pgscene .pg-why:empty{display:none}
+.pgscene .pg-why{min-height:0;font-size:calc(var(--u)*1.9);padding:.25em .8em}
+.pgscene .pg{gap:calc(var(--u)*.6)}
+.pgscene .pg textarea{height:calc(var(--u)*4.2);font-size:calc(var(--u)*1.55);padding:.35em .6em}
+.pgscene .pg button{font-size:calc(var(--u)*1.15);padding:.2em .6em}
+.pgscene .pg button.send{font-size:calc(var(--u)*1.6);padding:0 .9em}
+.pgscene .pg .chs{gap:calc(var(--u)*.35)}
+#ov button[data-part="1"]{border-left:4px solid var(--green)}
+#ov button[data-part="2"]{border-left:4px solid var(--cyan)}
+#ov button[data-part="3"]{border-left:4px solid var(--orange)}
+</style>
+</head>
+<body>
+<div id="amb">
+  <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
+  <div class="grid"></div>
+</div>
+<div class="brk a">{ }</div><div class="brk b">[ ]</div>
+<div id="prog"></div>
+<div id="scenetag"></div>
+<div id="timer"></div>
+
+<div id="stage">
+
+<!-- ═════════════════════ ABERTURA ═════════════════════ -->
+
+<section class="scene mid-center" data-accent="green" data-name="Capa">
+  <div class="kicker frag" data-anim="down">Tema 4 · Banco de Dados</div>
+  <h1 class="huge frag"><span class="glow">MongoDB</span></h1>
+  <div class="big frag">Manipulação de Dados</div>
+  <div class="lead frag" style="max-width:34ch">Inserir &nbsp;·&nbsp; Alterar &nbsp;·&nbsp; Modelar schemas</div>
+  <div class="note frag" data-anim="blur">&gt; loja.abrir()</div>
+</section>
+
+<section class="scene" data-accent="cyan" data-name="O cenário">
+  <div class="kicker frag" data-anim="left">O cenário de hoje</div>
+  <div class="big frag" data-anim="left">Vocês são os devs de uma <span class="c-cyan">loja online.</span></div>
+  <div class="pills frag stagger">
+    <span class="pill">👤 clientes</span><span class="pill">📦 produtos</span><span class="pill">🛒 carrinho</span>
+    <span class="pill">🧾 pedidos</span><span class="pill">💳 pagamentos</span>
+  </div>
+  <div class="mid frag" data-anim="zoom">E a Black Friday é <span class="c-pink">sexta-feira.</span></div>
+  <div class="note frag">Todo exemplo daqui pra frente é problema real de e-commerce.</div>
+</section>
+
+<section class="scene" data-accent="cyan" data-name="Agenda">
+  <div class="kicker frag" data-anim="left">O percurso</div>
+  <div class="under frag" data-anim="left"></div>
+  <div class="row st frag stagger">
+    <div class="card grow"><div class="num">01</div><h3>Inserção</h3><p>Colocar dados no banco.</p></div>
+    <div class="card grow" style="--accent:var(--cyan)"><div class="num">02</div><h3>Alteração</h3><p>Mudar sem quebrar nada.</p></div>
+    <div class="card grow" style="--accent:var(--orange)"><div class="num">03</div><h3>Schemas</h3><p>Regras quando precisar.</p></div>
+    <div class="card grow" style="--accent:var(--pink)"><div class="num">04</div><h3>Cola &amp; erros</h3><p>Resumo e pegadinhas.</p></div>
+  </div>
+  <div class="note frag">&gt; e no final… <span class="c-pink">Kahoot</span> 🎮</div>
+</section>
+
+<section class="scene tight" data-accent="purple" data-name="Hierarquia">
+  <div class="mid frag" data-anim="down">De fora pra dentro: <span class="c-purple">onde mora</span> o dado?</div>
+  <div class="hier">
+    <div class="lv srv frag" data-anim="zoom">
+      <div class="lh"><b>SERVIDOR</b><span>o MongoDB rodando</span><i>mongod · Atlas</i></div>
+      <div class="lv db frag" data-anim="zoom">
+        <div class="lh"><b>DATABASE</b><span class="mono">loja</span><i>um servidor tem vários bancos</i></div>
+        <div class="cols frag stagger">
+          <div class="lv col"><div class="lh"><b>COLLECTION</b><span class="mono">clientes</span></div>
+            <div class="dks"><i class="dk" data-m="docs">{ }</i><i class="dk" data-m="docs">{ }</i><i class="dk" data-m="docs">{ }</i></div></div>
+          <div class="lv col"><div class="lh"><b>COLLECTION</b><span class="mono">produtos</span></div>
+            <div class="dks"><i class="dk" data-m="docs">{ }</i><i class="dk" data-m="docs">{ }</i><i class="dk" data-m="docs">{ }</i></div></div>
+          <div class="lv col"><div class="lh"><b>COLLECTION</b><span class="mono">pedidos</span></div>
+            <div class="dks"><i class="dk" data-m="docs">{ }</i><i class="dk" data-m="docs">{ }</i><i class="dk" data-m="docs">{ }</i></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="note frag" data-mark="docs">…e dentro de cada collection: <b class="c-green">DOCUMENTS</b> <code>{ }</code></div>
+  <div class="map2 frag stagger">
+    <span style="--c:var(--amber)"><code>use loja</code> → database</span>
+    <span style="--c:var(--cyan)"><code>db.clientes</code> → collection</span>
+    <span style="--c:var(--green)"><code>.find()</code> → documents</span>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="pink" data-name="Anatomia do documento" data-marks-current>
+  <div class="kicker">Anatomia de um document · loja.clientes</div>
+  <div class="codex side">
+    <div class="win frag" data-anim="up"><div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">1 document</span></div>
+<pre class="code anatcode" style="font-size:calc(var(--u)*2.15)"><span class="mk" data-m="doc" style="--mc:var(--pink)">{</span>
+  <span class="mk" data-m="id" style="--mc:var(--amber)"><span class="mk" data-m="key" style="--mc:var(--blue)">_id</span>: <span class="mk" data-m="val" style="--mc:var(--orange)">ObjectId("6720f1a3…")</span></span><span class="tyb" data-m="ty">objectId</span>,
+  <span class="mk" data-m="key" style="--mc:var(--blue)">nome</span>: <span class="mk" data-m="val" style="--mc:var(--orange)">"Marina Souza"</span><span class="tyb" data-m="ty">string</span>,
+  <span class="mk" data-m="key" style="--mc:var(--blue)">idade</span>: <span class="mk" data-m="val" style="--mc:var(--orange)">29</span><span class="tyb" data-m="ty">int</span>,
+  <span class="mk" data-m="key" style="--mc:var(--blue)">vip</span>: <span class="mk" data-m="val" style="--mc:var(--orange)">true</span><span class="tyb" data-m="ty">bool</span>,
+  <span class="mk" data-m="key" style="--mc:var(--blue)">criadoEm</span>: <span class="mk" data-m="val" style="--mc:var(--orange)">ISODate("2026-10-26")</span><span class="tyb" data-m="ty">date</span>,
+  <span class="mk" data-m="sub" style="--mc:var(--purple)"><span class="mk" data-m="key" style="--mc:var(--blue)">endereco</span>: { <span class="mk" data-m="key" style="--mc:var(--blue)">cidade</span>: <span class="mk" data-m="val" style="--mc:var(--orange)">"Campinas"</span>, <span class="mk" data-m="key" style="--mc:var(--blue)">uf</span>: <span class="mk" data-m="val" style="--mc:var(--orange)">"SP"</span> }</span><span class="tyb" data-m="ty">object</span>,
+  <span class="mk" data-m="arr" style="--mc:var(--green)"><span class="mk" data-m="key" style="--mc:var(--blue)">tags</span>: [<span class="mk" data-m="val" style="--mc:var(--orange)">"gamer"</span>, <span class="mk" data-m="val" style="--mc:var(--orange)">"black-friday"</span>]</span><span class="tyb" data-m="ty">array</span>,
+  <span class="mk" data-m="arrdoc" style="--mc:var(--pink)"><span class="mk" data-m="key" style="--mc:var(--blue)">pedidos</span>: [
+    { <span class="mk" data-m="key" style="--mc:var(--blue)">_id</span>: <span class="mk" data-m="val" style="--mc:var(--orange)">1042</span>, <span class="mk" data-m="key" style="--mc:var(--blue)">status</span>: <span class="mk" data-m="val" style="--mc:var(--orange)">"pago"</span> }
+  ]</span>
+<span class="mk" data-m="doc" style="--mc:var(--pink)">}</span></pre></div>
+    <div class="explain">
+      <div class="ex frag" data-mark="doc" style="--accent:var(--pink)"><em>DOCUMENT</em><br>Tudo entre <code>{ }</code>. É o registro — a “linha” da tabela, só que com estrutura.</div>
+      <div class="ex frag" data-mark="id" style="--accent:var(--amber)"><em>_id</em><br>A chave primária. <b>Obrigatório e único</b> na collection. Não mandou? O Mongo gera.</div>
+      <div class="ex frag" data-mark="key" style="--accent:var(--blue)"><em>FIELD</em> (campo)<br>O nome antes dos dois-pontos. É a “coluna”.</div>
+      <div class="ex frag" data-mark="val" style="--accent:var(--orange)"><em>VALUE</em> (valor)<br>O que vem depois dos dois-pontos.</div>
+      <div class="ex frag" data-mark="val ty" style="--accent:var(--cyan)"><em>TIPOS BSON</em><br>Cada valor tem um tipo de verdade: string, int, bool, date, decimal, ObjectId…</div>
+      <div class="ex frag" data-mark="sub" style="--accent:var(--purple)"><em>SUBDOCUMENTO</em><br>Documento dentro do documento. Acessa com <code>"endereco.cidade"</code> (dot notation).</div>
+      <div class="ex frag" data-mark="arr" style="--accent:var(--green)"><em>ARRAY</em><br>Lista de valores. <code>{ tags: "gamer" }</code> já procura <b>dentro</b> da lista.</div>
+      <div class="ex frag" data-mark="arrdoc" style="--accent:var(--pink)"><em>ARRAY DE DOCUMENTOS</em><br>Lista de objetos. É o “embutir” que a gente vê no fim.</div>
+      <div class="ex frag" data-mark="doc id key val ty sub arr arrdoc" style="--accent:var(--amber)"><em>O DOCUMENTO INTEIRO</em><br>Máx. <b>16 MB</b> por documento. O próximo cliente pode ter <b>outros campos</b>.</div>
+    </div>
+  </div>
+</section>
+
+<section class="scene" data-accent="amber" data-name="Vocabulário">
+  <div class="mid frag" data-anim="down">Mesmo problema, <span class="c-amber">outro nome.</span></div>
+  <div class="map">
+    <div class="pair frag" data-anim="left"><span class="from">tabela</span><span class="arr">→</span><span class="to">collection</span></div>
+    <div class="pair frag" data-anim="left"><span class="from">linha</span><span class="arr">→</span><span class="to">document</span></div>
+    <div class="pair frag" data-anim="left"><span class="from">coluna</span><span class="arr">→</span><span class="to">field</span></div>
+    <div class="pair frag" data-anim="left"><span class="from">JOIN</span><span class="arr">→</span><span class="to">$lookup</span></div>
+  </div>
+</section>
+
+<section class="scene" data-accent="amber" data-name="Por que documento?">
+  <div class="kicker frag" data-anim="left">Caso real · catálogo de produtos</div>
+  <div class="mid frag" data-anim="left">Notebook, camiseta e livro <span class="c-amber">não têm as mesmas colunas.</span></div>
+  <div class="row st frag stagger">
+    <div class="win grow"><div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">notebook</span></div>
+<pre class="code xs hl">{
+  nome: "Notebook X15",
+  ram: "16 GB",
+  cpu: "Ryzen 7"
+}</pre></div>
+    <div class="win grow"><div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">camiseta</span></div>
+<pre class="code xs hl">{
+  nome: "Camiseta",
+  tamanho: "M",
+  cor: "preta"
+}</pre></div>
+    <div class="win grow"><div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">livro</span></div>
+<pre class="code xs hl">{
+  nome: "Dom Casmurro",
+  autor: "Machado",
+  paginas: 256
+}</pre></div>
+  </div>
+  <div class="note frag">Em SQL: colunas pra tudo, quase todas <span class="c-pink">NULL</span>. Aqui: cada produto tem <b>só o que precisa</b>.</div>
+</section>
+
+<section class="scene mid-center" data-accent="amber" data-name="BSON">
+  <div class="kicker frag" data-anim="down">Por baixo do capô</div>
+  <div class="huge frag">JSON? <span class="c-mut">Não.</span> <span class="glow">BSON.</span></div>
+  <div class="lead frag" style="max-width:40ch;text-align:center">JSON binário — com tipos que o texto não tem:</div>
+  <div class="pills frag stagger" style="justify-content:center">
+    <span class="pill"><b>ObjectId</b></span><span class="pill"><b>Date</b></span>
+    <span class="pill"><b>Decimal128</b></span><span class="pill"><b>int · long · double</b></span>
+  </div>
+  <div class="note frag">Guardem isso: a validação cobra o <span class="c-amber">tipo BSON</span>.</div>
+</section>
+
+<section class="scene mid-center" data-accent="pink" data-name="0.1 + 0.2">
+  <div class="kicker frag" data-anim="down">Por que o tipo importa</div>
+  <div class="huge frag mono" data-anim="zoom" style="font-size:calc(var(--u)*8)">0.1 + 0.2</div>
+  <div class="big frag mono" data-anim="pop"><span class="c-pink">= 0.30000000000000004</span></div>
+  <div class="note frag">double não representa 0,1 exato. Some isso em 1 milhão de pedidos…</div>
+  <div class="mid frag" data-anim="up">Dinheiro → <span class="c-green">Decimal128</span> <span class="c-mut">(ou centavos em int)</span></div>
+</section>
+
+<!-- ═════════════════════ ATO 1 · INSERÇÃO ═════════════════════ -->
+
+<section class="scene" data-accent="green" data-name="Ato 1 · Inserção">
+  <div class="numterm frag" data-anim="zoom"><span class="n">01</span><span class="huge">Inserção</span></div>
+  <div class="lead frag" data-anim="left" style="max-width:40ch">Caso real: alguém acabou de clicar em <b>“Criar conta”</b>.</div>
+</section>
+
+<section class="scene tight" data-accent="green" data-name="insertOne · código">
+  <div class="kicker">01 · Inserção · cadastro de cliente</div>
+  <div class="codex">
+    <div class="win frag" data-anim="up"><div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">mongosh</span></div>
+<pre class="code hl">db.clientes.insertOne({
+  nome: "Marina Souza",
+  email: "marina@email.com",
+  cidade: "Campinas",
+  criadoEm: new Date()
+})</pre></div>
+    <div class="explain">
+      <div class="ex frag" data-lines="1"><em>db</em> = banco atual · <em>clientes</em> = coleção. Não existe ainda? O Mongo <b>cria na hora</b>.</div>
+      <div class="ex frag" data-lines="1,6"><em>insertOne</em> recebe <b>um</b> objeto <code>{ }</code> = um documento.</div>
+      <div class="ex frag" data-lines="2-4">Campo: valor. Sem <code>CREATE TABLE</code> antes, sem definir colunas.</div>
+      <div class="ex frag" data-lines="5"><em>new Date()</em> vira tipo <b>Date</b> no BSON — data de verdade, não texto.</div>
+      <div class="ex frag">E o <em>_id</em>? Eu não passei nenhum… <b>vamos rodar.</b></div>
+    </div>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="green" data-name="insertOne · ao vivo">
+  <div class="mid frag" data-anim="down">Rodando <span class="c-green">de verdade</span> 👇</div>
+  <div class="sim tw" data-coll="clientes" data-mode="docs"></div>
+  <script type="text/plain" class="setup">
+db.clientes.insertOne({ nome: "João Lima", cidade: "Recife" })
+  </script>
+  <div class="says">
+<script type="text/plain" class="frag step">
+db.clientes.insertOne({
+  nome: "Marina Souza",
+  email: "marina@email.com",
+  cidade: "Campinas"
+})
+</script>
+    <div class="say frag">Não passei <em>_id</em>… e voltou um <em>insertedId</em>. Todo documento <b>tem</b> _id.</div>
+    <div class="say frag">Se você não manda, o Mongo gera um <em>ObjectId</em>. E não é aleatório →</div>
+  </div>
+</section>
+
+<section class="scene" data-accent="amber" data-name="ObjectId">
+  <div class="kicker frag" data-anim="left">Anatomia do _id · este foi gerado agora</div>
+  <div class="oid frag" data-anim="blur" id="oid"></div>
+  <div class="col">
+    <div class="oidcap frag" data-anim="left"><span class="sw" style="background:var(--amber)"></span><span><b>4 bytes</b> · data/hora da criação → <span class="c-amber mono" id="oidDate"></span></span></div>
+    <div class="oidcap frag" data-anim="left"><span class="sw" style="background:var(--purple)"></span><span><b>5 bytes</b> · aleatório da máquina/processo</span></div>
+    <div class="oidcap frag" data-anim="left"><span class="sw" style="background:var(--cyan)"></span><span><b>3 bytes</b> · contador que só cresce</span></div>
+  </div>
+  <div class="note frag">Real: dá pra saber <b>quando o cliente se cadastrou</b> sem campo extra → <code>_id.getTimestamp()</code></div>
+</section>
+
+<section class="scene tight" data-accent="green" data-name="insertMany · código">
+  <div class="kicker">Caso real · planilha do fornecedor</div>
+  <div class="codex">
+    <div class="win frag" data-anim="up"><div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">mongosh</span></div>
+<pre class="code s hl">db.produtos.insertMany([
+  { _id: "SKU-101", nome: "Fone Bluetooth" },
+  { _id: "SKU-102", nome: "Air Fryer", voltagem: 220 },
+  { _id: "SKU-103", nome: "Camiseta", tamanhos: ["P", "M"] }
+])</pre></div>
+    <div class="explain">
+      <div class="ex frag" data-lines="1,5"><em>insertMany</em> recebe um <b>array</b> <code>[ ]</code> — uma ida ao banco pra N documentos.</div>
+      <div class="ex frag" data-lines="2">Aqui eu <b>escolhi o _id</b>: o próprio SKU. Ele já é único, então pode ser a chave.</div>
+      <div class="ex frag" data-lines="3-4">Cada produto com <b>campos diferentes</b>. Mesma chamada, mesma coleção.</div>
+      <div class="ex frag" data-lines="1-5">Real: planilha com 10 mil linhas → <b>1 chamada</b>, não 10 mil.</div>
+    </div>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="pink" data-name="ordered: true">
+  <div class="mid frag" data-anim="down">A planilha tem um SKU <span class="c-pink">que já existe</span>. E agora?</div>
+  <div class="sim chips" data-coll="produtos" data-mode="chips"></div>
+  <script type="text/plain" class="setup">
+db.produtos.insertMany([{ _id: "SKU-100" }, { _id: "SKU-203" }])
+  </script>
+  <div class="says">
+<script type="text/plain" class="frag step">
+db.produtos.insertMany([
+  { _id: "SKU-201" }, { _id: "SKU-202" },
+  { _id: "SKU-203" }, { _id: "SKU-204" },
+  { _id: "SKU-205" }
+])
+</script>
+    <div class="say frag"><em>ordered: true</em> (o padrão): parou no erro. <b>204 e 205 ficaram de fora.</b></div>
+    <div class="say frag">E 201 e 202 <b>não foram desfeitos</b>. Erro no meio ≠ rollback.</div>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="green" data-name="ordered: false">
+  <div class="mid frag" data-anim="down">Mesma planilha, <span class="c-green">ordered: false</span></div>
+  <div class="sim chips" data-coll="produtos" data-mode="chips"></div>
+  <script type="text/plain" class="setup">
+db.produtos.insertMany([{ _id: "SKU-100" }, { _id: "SKU-203" }])
+  </script>
+  <div class="says">
+<script type="text/plain" class="frag step">
+db.produtos.insertMany([
+  { _id: "SKU-201" }, { _id: "SKU-202" },
+  { _id: "SKU-203" }, { _id: "SKU-204" },
+  { _id: "SKU-205" }
+], { ordered: false })
+</script>
+    <div class="say frag">Pulou o repetido e <b>seguiu</b>: 4 entraram. O erro volta numa lista pra você tratar.</div>
+    <div class="say frag">Importação em massa com erro esperado? <em>ordered: false</em>.</div>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="pink" data-name="Sem FOREIGN KEY">
+  <div class="mid frag" data-anim="down">Pedido pro cliente <span class="c-pink">999</span>… que não existe</div>
+  <div class="sim tw" data-coll="pedidos" data-mode="table" data-fields="_id,cliente_id,total"></div>
+  <script type="text/plain" class="setup">
+db.clientes.insertMany([
+  { _id: 7, nome: "Marina", ativo: true },
+  { _id: 8, nome: "Caio", ativo: false }
+])
+db.pedidos.insertOne({ _id: 1042, cliente_id: 7, total: NumberDecimal("399.90") })
+  </script>
+  <div class="says">
+<script type="text/plain" class="frag step">
+db.pedidos.insertOne({
+  _id: 1046,
+  cliente_id: 999,
+  total: NumberDecimal("89.90")
+})
+</script>
+    <div class="say frag">Entrou. <b>Sem erro.</b> O MongoDB <span class="c-pink"><b>não tem FOREIGN KEY</b></span>.</div>
+    <div class="say frag">Pedido órfão: o relatório procura o cliente 999 e… nada. Quem valida é <b>a aplicação</b>.</div>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="green" data-name="Validar antes de criar · código">
+  <div class="kicker">Caso real · API de checkout: o cliente existe?</div>
+  <div class="codex">
+    <div class="win frag" data-anim="up"><div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">mongosh</span></div>
+<pre class="code s hl">const cliente = db.clientes.findOne(
+  { _id: 7, ativo: true },
+  { _id: 1 }
+)
+if (!cliente) throw new Error("Cliente inválido")
+db.pedidos.insertOne({
+  cliente_id: cliente._id,
+  total: NumberDecimal("89.90")
+})</pre></div>
+    <div class="explain">
+      <div class="ex frag" data-lines="1"><em>findOne</em> devolve <b>o documento</b> ou <b>null</b>. Perfeito pra perguntar “existe?”.</div>
+      <div class="ex frag" data-lines="2">Filtro: o cliente existe <b>e está ativo</b>. Conta bloqueada também não compra.</div>
+      <div class="ex frag" data-lines="3"><em>Projeção</em> <code>{ _id: 1 }</code>: traz só o _id. Não carrega o cadastro inteiro à toa.</div>
+      <div class="ex frag" data-lines="5">Veio <b>null</b>? Para tudo. A API responde “cliente inválido” e <b>não cria</b> nada.</div>
+      <div class="ex frag" data-lines="6-9">Só agora cria o pedido — usando o _id que <b>veio do banco</b>, não o que o front mandou.</div>
+      <div class="ex frag">Também serve: <code>countDocuments({ _id: 7 }, { limit: 1 })</code> → <b>0 ou 1</b>.</div>
+    </div>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="green" data-name="Validar antes de criar · ao vivo">
+  <div class="mid frag" data-anim="down">Checkout de 3 clientes 🧾</div>
+  <div class="sim tw" data-coll="pedidos" data-mode="table" data-fields="_id,cliente_id,total"></div>
+  <script type="text/plain" class="setup">
+db.clientes.insertMany([
+  { _id: 7, nome: "Marina", ativo: true },
+  { _id: 8, nome: "Caio", ativo: false }
+])
+db.pedidos.insertOne({ _id: 1042, cliente_id: 7, total: NumberDecimal("399.90") })
+  </script>
+  <div class="says">
+<script type="text/plain" class="frag step">
+// cliente 999
+db.clientes.findOne(
+  { _id: 999, ativo: true },
+  { _id: 1 })
+</script>
+    <div class="say frag"><b>null</b> → não existe. A API para aqui e <b>não cria</b> pedido nenhum.</div>
+<script type="text/plain" class="frag step">
+// cliente 8 (Caio)
+db.clientes.findOne(
+  { _id: 8, ativo: true },
+  { _id: 1 })
+</script>
+    <div class="say frag">O Caio <b>existe</b>, mas está <b>inativo</b> → <b>null</b> também. O filtro barrou.</div>
+<script type="text/plain" class="frag step">
+// cliente 7 (Marina)
+db.clientes.findOne(
+  { _id: 7, ativo: true },
+  { _id: 1 })
+</script>
+    <div class="say frag">Existe e está ativa → <em>{ _id: 7 }</em>. Pode seguir.</div>
+<script type="text/plain" class="frag step">
+db.pedidos.insertOne({
+  _id: 1046, cliente_id: 7,
+  total: NumberDecimal("89.90") })
+</script>
+    <div class="say frag">Pedido criado <b>depois</b> da checagem. ✅</div>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="amber" data-name="Cadastro duplicado · unique">
+  <div class="mid frag" data-anim="down">E o <span class="c-amber">duplo clique</span> em “Criar conta”? 🖱️🖱️</div>
+  <div class="sim tw" data-coll="clientes" data-mode="table" data-fields="nome,email"></div>
+  <script type="text/plain" class="setup">
+db.clientes.insertOne({ nome: "Marina", email: "marina@email.com" })
+  </script>
+  <div class="says">
+<script type="text/plain" class="frag step">
+db.clientes.createIndex(
+  { email: 1 },
+  { unique: true })
+</script>
+    <div class="say frag">Índice <em>unique</em>: o próprio banco garante <b>1 cadastro por email</b>.</div>
+<script type="text/plain" class="frag step">
+// 2º clique, mesma requisição
+db.clientes.insertOne({
+  nome: "Marina",
+  email: "marina@email.com" })
+</script>
+    <div class="say frag">Barrado. E por que não só um findOne antes? Dois cliques no mesmo milissegundo <b>passam os dois</b> pelo find. O índice é a garantia.</div>
+  </div>
+</section>
+
+<!-- ═════════════════════ ATO 2 · ALTERAÇÃO ═════════════════════ -->
+
+<section class="scene" data-accent="cyan" data-name="Ato 2 · Alteração" data-part="2">
+  <div class="numterm frag" data-anim="zoom"><span class="n">02</span><span class="huge">Alteração</span></div>
+  <div class="lead frag" data-anim="left" style="max-width:40ch">Caso real: o pagamento do pedido <b>1042</b> foi aprovado.</div>
+</section>
+
+<section class="scene tight" data-accent="cyan" data-name="Anatomia do update">
+  <div class="kicker">02 · Alteração · todo update tem duas partes</div>
+  <div class="codex">
+    <div class="win frag" data-anim="up"><div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">mongosh</span></div>
+<pre class="code hl">db.pedidos.updateOne(
+  { _id: 1042 },                 // FILTRO
+  { $set: { status: "pago" } }   // O QUE MUDA
+)</pre></div>
+    <div class="explain">
+      <div class="ex frag" data-lines="1"><em>updateOne</em>: altera <b>no máximo 1</b> documento — o primeiro que bater.</div>
+      <div class="ex frag" data-lines="2">Parte 1 · <em>filtro</em>: igual ao WHERE. <b>Quem</b> vai mudar?</div>
+      <div class="ex frag" data-lines="3">Parte 2 · <em>operador</em>: <b>o que</b> muda. <code>$set</code> define o valor do campo.</div>
+      <div class="ex frag" data-lines="3">Esqueceu o operador? O mongosh recusa: <code>Update document requires atomic operators</code>.</div>
+    </div>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="cyan" data-name="updateOne · ao vivo">
+  <div class="mid frag" data-anim="down">Pagamento aprovado → <span class="c-cyan">status: "pago"</span></div>
+  <div class="sim" data-coll="pedidos" data-mode="table" data-fields="_id,status,total"></div>
+  <script type="text/plain" class="setup">
+db.pedidos.insertMany([
+  { _id: 1041, status: "enviado",  total: NumberDecimal("120.00") },
+  { _id: 1042, status: "pendente", total: NumberDecimal("399.90") },
+  { _id: 1043, status: "pendente", total: NumberDecimal("59.90") }
+])
+  </script>
+  <div class="says">
+<script type="text/plain" class="frag step">
+db.pedidos.updateOne(
+  { _id: 1042 },
+  { $set: { status: "pago" } }
+)
+</script>
+    <div class="say frag"><em>matchedCount: 1</em> → achou. <em>modifiedCount: 1</em> → mudou.</div>
+<script type="text/plain" class="frag step">
+// o gateway avisou de novo…
+db.pedidos.updateOne(
+  { _id: 1042 },
+  { $set: { status: "pago" } }
+)
+</script>
+    <div class="say frag">De novo? <b>matched 1, modified 0</b>: já estava “pago”, nada foi regravado.</div>
+  </div>
+</section>
+
+
+<section class="scene tight" data-accent="cyan" data-name="updateMany · código">
+  <div class="kicker">Caso real · Black Friday, 20% off em eletrônicos</div>
+  <div class="codex">
+    <div class="win frag" data-anim="up"><div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">mongosh</span></div>
+<pre class="code hl">db.produtos.updateMany(
+  { categoria: "eletrônicos" },
+  { $mul: { preco: NumberDecimal("0.8") },
+    $set: { promo: true } }
+)</pre></div>
+    <div class="explain">
+      <div class="ex frag" data-lines="1-2">Filtro pega <b>todos</b> os eletrônicos — não só o primeiro.</div>
+      <div class="ex frag" data-lines="3"><em>$mul</em> multiplica <b>dentro do banco</b>: preço × 0,8 = 20% off.</div>
+      <div class="ex frag" data-lines="3-4">Dois operadores no mesmo update. Cada documento muda <b>de uma vez só</b> (atômico).</div>
+    </div>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="cyan" data-name="Black Friday · ao vivo">
+  <div class="mid frag" data-anim="down">00:00 · <span class="c-cyan">liga a Black Friday</span></div>
+  <div class="sim cw" style="--tfs:1.75" data-coll="produtos" data-mode="table" data-fields="nome,categoria,preco,promo"></div>
+  <script type="text/plain" class="setup">
+db.produtos.insertMany([
+  { _id: "SKU-101", nome: "Fone",     categoria: "eletrônicos", preco: NumberDecimal("89.90") },
+  { _id: "SKU-205", nome: "Smart TV", categoria: "eletrônicos", preco: NumberDecimal("2199.00") },
+  { _id: "SKU-310", nome: "Notebook", categoria: "eletrônicos", preco: NumberDecimal("3499.90") },
+  { _id: "SKU-402", nome: "Camiseta", categoria: "moda",        preco: NumberDecimal("49.90") }
+])
+  </script>
+  <div class="says">
+<script type="text/plain" class="frag step">
+db.produtos.updateMany(
+  { categoria: "eletrônicos" },
+  { $mul: {
+      preco: NumberDecimal("0.8") },
+    $set: { promo: true } })
+</script>
+    <div class="say frag"><em>modifiedCount: 3</em>. A camiseta ficou de fora — o filtro manda.</div>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="pink" data-name="Bug do replaceOne">
+  <div class="mid frag" data-anim="down">O bug da tela <span class="c-pink">“Editar perfil”</span></div>
+  <div class="sim" data-coll="clientes" data-mode="docs"></div>
+  <script type="text/plain" class="setup">
+db.clientes.insertOne({ _id: 7, nome: "Marina Souza", email: "marina@email.com", cidade: "Campinas", telefone: "(19) 99999-0000", pontos: 1280 })
+  </script>
+  <div class="says">
+    <div class="say frag">A tela só manda <b>nome</b> e <b>email</b>. O dev usou <em>replaceOne</em>…</div>
+<script type="text/plain" class="frag step">
+db.clientes.replaceOne({ _id: 7 }, {
+  nome: "Marina S.",
+  email: "marina@email.com"
+})
+</script>
+    <div class="say frag">Cidade, telefone e <span class="c-pink"><b>1.280 pontos de fidelidade</b></span> sumiram. Só o _id fica. 💥</div>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="green" data-name="$set resolve">
+  <div class="mid frag" data-anim="down">Mesma tela, <span class="c-green">$set</span></div>
+  <div class="sim" data-coll="clientes" data-mode="docs"></div>
+  <script type="text/plain" class="setup">
+db.clientes.insertOne({ _id: 7, nome: "Marina Souza", email: "marina@email.com", cidade: "Campinas", telefone: "(19) 99999-0000", pontos: 1280 })
+  </script>
+  <div class="says">
+<script type="text/plain" class="frag step">
+db.clientes.updateOne({ _id: 7 }, {
+  $set: { nome: "Marina S." }
+})
+</script>
+    <div class="say frag">Só o nome mudou. O resto ficou <b>intacto</b>.</div>
+    <div class="say frag">🔪 <em>$set</em> = bisturi &nbsp;·&nbsp; 💥 <span class="c-pink"><b>replaceOne</b></span> = demolição</div>
+  </div>
+</section>
+
+<section class="scene" data-accent="pink" data-name="Corrida pela última unidade">
+  <div class="kicker frag" data-anim="left">Caso real · Black Friday, 00:00:01 · resta <span class="c-amber">1 Air Fryer</span></div>
+  <div class="mid frag" data-anim="left">Dois clientes clicam em <span class="c-amber">“Comprar”</span> juntos.</div>
+  <div class="race">
+    <div class="rr h frag"><span class="ca">Cliente A</span><span class="cb">Cliente B</span><span style="text-align:center">estoque</span></div>
+    <div class="rr frag" data-anim="left"><span class="ca">lê → 1</span><span></span><b>1</b></div>
+    <div class="rr frag" data-anim="right"><span></span><span class="cb">lê → 1</span><b>1</b></div>
+    <div class="rr frag" data-anim="left"><span class="ca">grava 1 − 1 = 0</span><span></span><b>0</b></div>
+    <div class="rr frag" data-anim="right"><span></span><span class="cb">grava 1 − 1 = 0</span><b>0</b></div>
+  </div>
+  <div class="mid frag" data-anim="pop"><span class="c-pink">Vendeu 2. Tinha 1.</span> 💥</div>
+  <div class="note frag">Ler → calcular → gravar no app = <b>condição de corrida</b>.</div>
+</section>
+
+<section class="scene tight" data-accent="green" data-name="$inc atômico · código">
+  <div class="kicker">A correção · deixa o banco fazer a conta</div>
+  <div class="codex">
+    <div class="win frag" data-anim="up"><div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">mongosh</span></div>
+<pre class="code hl">db.produtos.updateOne(
+  { _id: "SKU-102", estoque: { $gte: 1 } },
+  { $inc: { estoque: -1 } }
+)</pre></div>
+    <div class="explain">
+      <div class="ex frag" data-lines="2">O filtro só acha o produto <b>se ainda tiver estoque</b> (<code>$gte</code> = maior ou igual).</div>
+      <div class="ex frag" data-lines="3"><em>$inc</em> soma no próprio banco (aqui, −1). Ninguém lê antes.</div>
+      <div class="ex frag" data-lines="2-3">Filtro + alteração acontecem <b>juntos, atomicamente</b>, no documento.</div>
+      <div class="ex frag" data-lines="1-4">O resultado diz quem ganhou: <em>modifiedCount 1</em> = vendeu · <em>0</em> = esgotado.</div>
+    </div>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="green" data-name="$inc · ao vivo">
+  <div class="mid frag" data-anim="down">A corrida, agora <span class="c-green">do jeito certo</span></div>
+  <div class="sim tw" data-coll="produtos" data-mode="table" data-fields="_id,nome,estoque"></div>
+  <script type="text/plain" class="setup">
+db.produtos.insertMany([
+  { _id: "SKU-101", nome: "Fone", estoque: 37 },
+  { _id: "SKU-102", nome: "Air Fryer", estoque: 1 }
+])
+  </script>
+  <div class="says">
+<script type="text/plain" class="frag step">
+// Cliente A
+db.produtos.updateOne(
+  { _id: "SKU-102", estoque: { $gte: 1 } },
+  { $inc: { estoque: -1 } })
+</script>
+    <div class="say frag"><em>modifiedCount: 1</em> → Cliente A levou. Estoque 0.</div>
+<script type="text/plain" class="frag step">
+// Cliente B, no mesmo segundo
+db.produtos.updateOne(
+  { _id: "SKU-102", estoque: { $gte: 1 } },
+  { $inc: { estoque: -1 } })
+</script>
+    <div class="say frag"><em>matchedCount: 0</em> → filtro não achou ninguém. Tela mostra “Esgotado”. <b>Nunca −1.</b></div>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="cyan" data-name="bulkWrite · código">
+  <div class="kicker">Caso real · carrinho com vários itens</div>
+  <div class="codex">
+    <div class="win frag" data-anim="up"><div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">mongosh</span></div>
+<pre class="code s hl">db.produtos.bulkWrite([
+  { updateOne: {
+      filter: { _id: "SKU-101", estoque: { $gte: 2 } },
+      update: { $inc: { estoque: -2 } } } },
+  { updateOne: {
+      filter: { _id: "SKU-102", estoque: { $gte: 2 } },
+      update: { $inc: { estoque: -2 } } } }
+], { ordered: true })</pre></div>
+    <div class="explain">
+      <div class="ex frag" data-lines="1,8"><em>bulkWrite</em>: várias escritas numa <b>única ida</b> ao banco. Carrinho com 10 itens = 1 chamada.</div>
+      <div class="ex frag" data-lines="2-4">Cada item é uma operação: <em>updateOne</em> com <code>filter</code> e <code>update</code>, igual ao que já vimos.</div>
+      <div class="ex frag" data-lines="3,6">Mesma proteção da Air Fryer: só baixa <b>se tiver estoque</b>.</div>
+      <div class="ex frag" data-lines="1-8">Aceita misturar <code>insertOne</code>, <code>updateOne</code>, <code>deleteOne</code>, <code>replaceOne</code>…</div>
+      <div class="ex frag">⚠️ Mas <b>não é tudo ou nada</b>: se o 2º item falhar, o 1º <b>já baixou</b>. Vamos ver.</div>
+    </div>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="cyan" data-name="bulkWrite · ao vivo">
+  <div class="mid frag" data-anim="down">Carrinho: <span class="c-cyan">2 Fones + 2 Air Fryers</span> 🛒</div>
+  <div class="sim tw" data-coll="produtos" data-mode="table" data-fields="_id,nome,estoque"></div>
+  <script type="text/plain" class="setup">
+db.produtos.insertMany([
+  { _id: "SKU-101", nome: "Fone", estoque: 37 },
+  { _id: "SKU-102", nome: "Air Fryer", estoque: 1 }
+])
+vars.carrinho = [
+  { updateOne: { filter: { _id: "SKU-101", estoque: { $gte: 2 } }, update: { $inc: { estoque: -2 } } } },
+  { updateOne: { filter: { _id: "SKU-102", estoque: { $gte: 2 } }, update: { $inc: { estoque: -2 } } } }
+]
+  </script>
+  <div class="says">
+<script type="text/plain" class="frag step">
+// carrinho = as 2 operações do slide anterior
+db.produtos.bulkWrite(carrinho)
+</script>
+    <div class="say frag">Fone: 37 → <b>35</b> ✅ &nbsp;·&nbsp; Air Fryer: só tinha 1 → <b>não baixou</b> (<em>matchedCount: 1</em> de 2).</div>
+    <div class="say frag">O cliente não pode levar o carrinho, mas <span class="c-pink"><b>2 fones já saíram do estoque</b></span>. Meio checkout. 😬</div>
+  </div>
+</section>
+
+<section class="scene" data-accent="pink" data-name="Por que transação?">
+  <div class="kicker frag" data-anim="left">Caso real · um checkout mexe em 3 collections</div>
+  <div class="race">
+    <div class="rr h frag"><span>passo</span><span>collection</span><span style="text-align:center">status</span></div>
+    <div class="rr frag" data-anim="left"><span>📦 baixa o estoque</span><span class="ca">produtos</span><b class="c-green">✅</b></div>
+    <div class="rr frag" data-anim="left"><span>🧾 cria o pedido</span><span class="ca">pedidos</span><b>💥</b></div>
+    <div class="rr frag" data-anim="left"><span>💳 grava o pagamento</span><span class="ca">pagamentos</span><b class="c-mut">—</b></div>
+  </div>
+  <div class="mid frag" data-anim="pop">Estoque baixou, <span class="c-pink">pedido não existe.</span></div>
+  <div class="big frag" data-anim="zoom">Transação = <span class="c-green">tudo ou nada.</span></div>
+  <div class="note frag">ACID com vários documentos e collections desde o MongoDB 4.0 · precisa de replica set (o Atlas já é)</div>
+</section>
+
+<section class="scene tight" data-accent="green" data-name="Transação · código">
+  <div class="kicker">A correção · checkout dentro de uma transação</div>
+  <div class="codex side">
+    <div class="win frag" data-anim="up"><div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">mongosh</span></div>
+<pre class="code xs hl">const s = db.getMongo().startSession()
+const loja = s.getDatabase("loja")
+s.startTransaction()
+try {
+  const r = loja.produtos.updateOne(
+    { _id: "SKU-102", estoque: { $gte: 1 } },
+    { $inc: { estoque: -1 } })
+  if (!r.modifiedCount) throw new Error("Esgotado")
+  loja.pedidos.insertOne({ cliente_id: 7 })
+  s.commitTransaction()
+} catch (e) {
+  s.abortTransaction()
+}</pre></div>
+    <div class="explain">
+      <div class="ex frag" data-lines="1"><em>Sessão</em>: o “canal” que agrupa as operações.</div>
+      <div class="ex frag" data-lines="2">As collections são acessadas <b>pela sessão</b>, senão ficam fora da transação.</div>
+      <div class="ex frag" data-lines="3"><em>startTransaction</em>: daqui pra baixo, <b>nada é definitivo</b> ainda.</div>
+      <div class="ex frag" data-lines="5-7">Baixa o estoque, com a mesma proteção da Air Fryer.</div>
+      <div class="ex frag" data-lines="8">Esgotado? <b>throw</b> → pula direto pro catch.</div>
+      <div class="ex frag" data-lines="9">Cria o pedido — em <b>outra collection</b>, na mesma transação.</div>
+      <div class="ex frag" data-lines="10"><em>commitTransaction</em>: agora as mudanças valem, <b>todas juntas</b>.</div>
+      <div class="ex frag" data-lines="11-13">Qualquer erro? <em>abortTransaction</em> desfaz <b>tudo</b>.</div>
+      <div class="ex frag">Transação custa mais que um update simples: use quando <b>várias escritas</b> precisam andar juntas.</div>
+    </div>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="green" data-name="Transação · ao vivo">
+  <div class="mid frag" data-anim="down">O mesmo carrinho, <span class="c-green">com transação</span></div>
+  <div class="sim tw" data-coll="produtos" data-mode="table" data-fields="_id,nome,estoque"></div>
+  <script type="text/plain" class="setup">
+db.produtos.insertMany([
+  { _id: "SKU-101", nome: "Fone", estoque: 37 },
+  { _id: "SKU-102", nome: "Air Fryer", estoque: 1 }
+])
+vars.loja = s.getDatabase("loja")
+  </script>
+  <div class="says">
+    <div class="say frag"><code>s</code> e <code>loja</code> já estão prontos, iguais às 2 primeiras linhas do slide anterior.</div>
+<script type="text/plain" class="frag step">
+s.startTransaction()
+</script>
+    <div class="say frag">Transação aberta. Daqui pra frente, nada é definitivo.</div>
+<script type="text/plain" class="frag step">
+// 2 fones
+loja.produtos.updateOne(
+  { _id: "SKU-101", estoque: { $gte: 2 } },
+  { $inc: { estoque: -2 } })
+</script>
+    <div class="say frag">Fone: 37 → <b>35</b>… por enquanto.</div>
+<script type="text/plain" class="frag step">
+// 2 air fryers
+loja.produtos.updateOne(
+  { _id: "SKU-102", estoque: { $gte: 2 } },
+  { $inc: { estoque: -2 } })
+</script>
+    <div class="say frag">Air Fryer: <em>matchedCount: 0</em> → esgotada. A API cai no <code>catch</code>…</div>
+<script type="text/plain" class="frag step">
+s.abortTransaction()
+</script>
+    <div class="say frag">O Fone <b>voltou pra 37</b>. Nada aconteceu pela metade. ✅ Se tudo desse certo: <em>commitTransaction()</em>.</div>
+  </div>
+</section>
+
+<section class="scene" data-accent="purple" data-name="Arrays">
+  <div class="kicker frag" data-anim="left">Caso real · carrinho e notificações</div>
+  <div class="big frag" data-anim="left">Mexendo em <span class="c-purple">listas</span></div>
+  <div class="row st frag stagger">
+    <div class="card grow" style="--accent:var(--purple)"><h3 class="c-purple mono">$push</h3><p>Adiciona no fim.<br><b>“Adicionar ao carrinho”</b></p></div>
+    <div class="card grow" style="--accent:var(--purple)"><h3 class="c-purple mono">$pull</h3><p>Tira pelo valor.<br><b>“Remover do carrinho”</b></p></div>
+    <div class="card grow" style="--accent:var(--purple)"><h3 class="c-purple mono">$addToSet</h3><p>Adiciona se não existir.<br><b>“Registrar o celular 📱”</b></p></div>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="purple" data-name="Carrinho · ao vivo">
+  <div class="mid frag" data-anim="down">A Marina fazendo compras 🛒</div>
+  <div class="sim tw" data-coll="usuarios" data-mode="docs"></div>
+  <script type="text/plain" class="setup">
+db.usuarios.insertOne({ _id: 7, nome: "Marina", carrinho: ["SKU-101"], celulares: ["cel-a91f"] })
+  </script>
+  <div class="says">
+<script type="text/plain" class="frag step">
+db.usuarios.updateOne({ _id: 7 },
+  { $push: { carrinho: "SKU-205" } })
+</script>
+    <div class="say frag"><em>$push</em>: entrou no fim do carrinho.</div>
+<script type="text/plain" class="frag step">
+db.usuarios.updateOne({ _id: 7 },
+  { $pull: { carrinho: "SKU-101" } })
+</script>
+    <div class="say frag"><em>$pull</em>: removeu pelo valor — não precisa saber a posição.</div>
+    <div class="say frag">Toda vez que abre, o app manda o <b>ID do celular</b> pra receber notificações…</div>
+<script type="text/plain" class="frag step">
+// app abriu de novo, mesmo celular
+db.usuarios.updateOne({ _id: 7 },
+  { $addToSet: { celulares: "cel-a91f" } })
+</script>
+    <div class="say frag"><em>$addToSet</em> com item que já está lá: <b>modifiedCount: 0</b>. Nada duplicou.</div>
+<script type="text/plain" class="frag step">
+// e se fosse $push?
+db.usuarios.updateOne({ _id: 7 },
+  { $push: { celulares: "cel-a91f" } })
+</script>
+    <div class="say frag">Com <span class="c-pink"><b>$push</b></span>: 50 aberturas = 50 cópias = <b>a mesma notificação 50 vezes</b>. 😬</div>
+  </div>
+</section>
+
+
+
+<section class="scene tight" data-accent="blue" data-name="LGPD · $unset">
+  <div class="mid frag" data-anim="down"><span class="c-blue">LGPD:</span> “Apaguem meus dados pessoais.”</div>
+  <div class="sim tw" data-coll="clientes" data-mode="docs"></div>
+  <script type="text/plain" class="setup">
+db.clientes.insertOne({ _id: 7, nome: "Marina Souza", cpf: "123.456.789-09", telefone: "(19) 99999-0000", pedidos: 12 })
+  </script>
+  <div class="says">
+<script type="text/plain" class="frag step">
+db.clientes.updateOne({ _id: 7 }, {
+  $unset: { cpf: "", telefone: "" },
+  $set: { nome: "anonimizado" }
+})
+</script>
+    <div class="say frag"><em>$unset</em> <b>remove o campo</b> — não vira null, deixa de existir. O <code>""</code> é só convenção.</div>
+    <div class="say frag"><b>pedidos: 12</b> continua: o financeiro ainda precisa do histórico.</div>
+  </div>
+</section>
+
+<section class="scene" data-accent="amber" data-name="Webhook duplicado">
+  <div class="kicker frag" data-anim="left">Caso real · webhook de pagamento</div>
+  <div class="big frag" data-anim="left">O gateway avisa “pago”… <span class="c-amber">duas vezes.</span></div>
+  <div class="note frag">Não recebeu resposta a tempo? <b>Ele reenvia.</b> Todo gateway de pagamento faz isso.</div>
+  <div class="mid frag" data-anim="up">Com <span class="c-pink">insertOne</span> → 2 pagamentos pro mesmo pedido.</div>
+</section>
+
+<section class="scene tight" data-accent="green" data-name="upsert · código">
+  <div class="kicker">A correção · update + insert = upsert</div>
+  <div class="codex">
+    <div class="win frag" data-anim="up"><div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">mongosh</span></div>
+<pre class="code hl">db.pagamentos.updateOne(
+  { _id: "evt_9f3a" },
+  { $set: { status: "aprovado" },
+    $inc: { avisos: 1 } },
+  { upsert: true }
+)</pre></div>
+    <div class="explain">
+      <div class="ex frag" data-lines="2">Filtro pelo <b>id do evento</b> que o gateway manda junto.</div>
+      <div class="ex frag" data-lines="3-4">Achou → <b>atualiza</b>. <code>$inc</code> só pra gente contar quantos avisos chegaram.</div>
+      <div class="ex frag" data-lines="5"><em>upsert: true</em> → não achou? <b>Cria</b>, usando o _id do filtro + os campos do update.</div>
+      <div class="ex frag" data-lines="1-6">1 aviso ou 10, <b>o mesmo estado final</b>. Isso tem nome: <em>idempotência</em>.</div>
+    </div>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="green" data-name="upsert · ao vivo">
+  <div class="mid frag" data-anim="down">Chegou o webhook 📩</div>
+  <div class="sim tw" data-coll="pagamentos" data-mode="docs"></div>
+  <div class="says">
+<script type="text/plain" class="frag step">
+db.pagamentos.updateOne(
+  { _id: "evt_9f3a" },
+  { $set: { status: "aprovado" },
+    $inc: { avisos: 1 } },
+  { upsert: true })
+</script>
+    <div class="say frag">Não existia → <em>upsertedCount: 1</em>. Criou com o _id do filtro.</div>
+    <div class="say frag">E aí o gateway <b>reenvia</b> o mesmo aviso…</div>
+<script type="text/plain" class="frag step">
+db.pagamentos.updateOne(
+  { _id: "evt_9f3a" },
+  { $set: { status: "aprovado" },
+    $inc: { avisos: 1 } },
+  { upsert: true })
+</script>
+    <div class="say frag">Já existia → só atualizou (<em>avisos: 2</em>). <b>Continua 1 documento.</b></div>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="amber" data-name="findOneAndUpdate · código">
+  <div class="kicker">Caso real · número do pedido, senha de atendimento</div>
+  <div class="codex">
+    <div class="win frag" data-anim="up"><div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">mongosh</span></div>
+<pre class="code hl">db.contadores.findOneAndUpdate(
+  { _id: "pedido" },
+  { $inc: { seq: 1 } },
+  { returnDocument: "after" }
+)</pre></div>
+    <div class="explain">
+      <div class="ex frag" data-lines="1">Altera <b>e devolve</b> o documento, numa operação só.</div>
+      <div class="ex frag" data-lines="3">Cada chamada soma 1 → dois pedidos <b>nunca</b> pegam o mesmo número.</div>
+      <div class="ex frag" data-lines="4"><em>returnDocument: "after"</em> devolve o documento <b>depois</b> da mudança.</div>
+      <div class="ex frag" data-lines="4">🪤 Sem isso, o padrão é <b>"before"</b>: você recebe o número <b>antigo</b>.</div>
+    </div>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="amber" data-name="Número do pedido · ao vivo">
+  <div class="mid frag" data-anim="down">Qual o número do próximo pedido?</div>
+  <div class="sim" data-coll="contadores" data-mode="docs"></div>
+  <script type="text/plain" class="setup">
+db.contadores.insertOne({ _id: "pedido", seq: 1042 })
+  </script>
+  <div class="says">
+<script type="text/plain" class="frag step">
+db.contadores.findOneAndUpdate(
+  { _id: "pedido" },
+  { $inc: { seq: 1 } }
+)
+</script>
+    <div class="say frag">Devolveu <b>1042</b>… mas o banco já está em <b>1043</b>. 🪤 Padrão = <em>before</em>.</div>
+<script type="text/plain" class="frag step">
+db.contadores.findOneAndUpdate(
+  { _id: "pedido" },
+  { $inc: { seq: 1 } },
+  { returnDocument: "after" }
+)
+</script>
+    <div class="say frag">Com <em>"after"</em>: <b>1044</b> — o número que o pedido vai usar de verdade.</div>
+  </div>
+</section>
+
+<!-- ═════════════════════ ATO 3 · SCHEMAS ═════════════════════ -->
+
+<section class="scene mid-center" data-accent="orange" data-name="Ato 3 · Schemas" data-part="3">
+  <div class="numterm frag" data-anim="zoom"><span class="n">03</span><span class="huge">Schemas</span></div>
+  <div class="frag" data-anim="zoom" style="line-height:1">
+    <div class="big glow">SCHEMA FLEXÍVEL</div>
+    <div class="big c-mut">≠</div>
+    <div class="big">SEM REGRAS</div>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="pink" data-name="Bug do total em texto">
+  <div class="mid frag" data-anim="down">O front mandou o total <span class="c-pink">como texto</span>…</div>
+  <div class="sim tw" data-coll="pedidos" data-mode="table" data-fields="_id,status,total"></div>
+  <script type="text/plain" class="setup">
+db.pedidos.insertMany([
+  { _id: 1041, status: "pago", total: NumberDecimal("120.00") },
+  { _id: 1042, status: "pago", total: NumberDecimal("89.90") }
+])
+  </script>
+  <div class="says">
+<script type="text/plain" class="frag step">
+db.pedidos.insertOne({
+  _id: 1045,
+  status: "pago",
+  total: "59,90"
+})
+</script>
+    <div class="say frag">Entrou. Sem erro, sem aviso. Schema flexível 🙂</div>
+    <div class="say frag">No fim do mês, o relatório de faturamento…</div>
+<script type="text/plain" class="frag step">
+db.pedidos.aggregate([
+  { $group: { _id: null,
+      faturamento: { $sum: "$total" } } }
+])
+</script>
+    <div class="say frag">Deveria dar <b>269,80</b>. O <code>$sum</code> <span class="c-pink"><b>ignora texto</b></span>: R$ 59,90 sumiram do relatório, em silêncio.</div>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="orange" data-name="$jsonSchema · código">
+  <div class="kicker">A correção · regra na porta da coleção</div>
+  <div class="codex side">
+    <div class="win frag" data-anim="up"><div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">mongosh</span></div>
+<pre class="code xs hl">db.createCollection("pedidos", {
+  validator: { $jsonSchema: {
+    bsonType: "object",
+    required: ["cliente_id", "total", "status"],
+    properties: {
+      total:  { bsonType: "decimal" },
+      status: { enum: ["pendente", "pago",
+                       "enviado"] },
+      itens:  { bsonType: "array",
+                minItems: 1 }
+    }
+  }}
+})</pre></div>
+    <div class="explain">
+      <div class="ex frag" data-lines="1">Cria a coleção <b>já com regra</b>.</div>
+      <div class="ex frag" data-lines="2"><em>validator</em> + <em>$jsonSchema</em>: o padrão JSON Schema, com tipos BSON.</div>
+      <div class="ex frag" data-lines="4"><em>required</em>: faltou um desses? <b>Nem entra.</b></div>
+      <div class="ex frag" data-lines="6"><em>total</em> tem que ser <b>decimal</b>. “59,90” em texto é barrado.</div>
+      <div class="ex frag" data-lines="7-8"><em>enum</em>: só esses valores. Adeus “Pago”, “PAGO”, “pagou”.</div>
+      <div class="ex frag" data-lines="9-10">Não é obrigatório, mas <b>se vier</b> <em>itens</em>, tem que ser lista com 1+ item.</div>
+    </div>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="orange" data-name="Validação · ao vivo">
+  <div class="mid frag" data-anim="down">Tentando de novo, <span class="c-orange">agora com regra</span></div>
+  <div class="sim tw" data-coll="pedidos" data-mode="table" data-fields="_id,cliente_id,status,total"></div>
+  <script type="text/plain" class="setup">
+db.createCollection("pedidos", { validator: { $jsonSchema: {
+  bsonType: "object",
+  required: ["cliente_id", "total", "status"],
+  properties: {
+    total: { bsonType: "decimal" },
+    status: { enum: ["pendente", "pago", "enviado"] },
+    itens: { bsonType: "array", minItems: 1 }
+  }
+}}})
+db.pedidos.insertOne({ _id: 1044, cliente_id: 3, status: "enviado", total: NumberDecimal("120.00") })
+  </script>
+  <div class="says">
+<script type="text/plain" class="frag step">
+db.pedidos.insertOne({ _id: 1045,
+  cliente_id: 7, status: "pago",
+  total: "59,90" })
+</script>
+    <div class="say frag">Barrado na porta: <em>total</em> veio como texto.</div>
+<script type="text/plain" class="frag step">
+db.pedidos.insertOne({ _id: 1045,
+  cliente_id: 7, status: "Pago",
+  total: NumberDecimal("59.90") })
+</script>
+    <div class="say frag">“Pago” com P maiúsculo? O <em>enum</em> não aceita.</div>
+<script type="text/plain" class="frag step">
+db.pedidos.insertOne({ _id: 1045,
+  cliente_id: 7, status: "pago",
+  total: NumberDecimal("59.90") })
+</script>
+    <div class="say frag">Agora sim. O banco protegeu <b>o relatório de amanhã</b>.</div>
+  </div>
+</section>
+
+<section class="scene" data-accent="cyan" data-name="Level & action">
+  <div class="mid frag" data-anim="down">E se a coleção já tem <span class="c-amber">2 milhões</span> de pedidos fora da regra?</div>
+  <div class="row st">
+    <div class="panel frag" data-anim="left">
+      <div class="tag c-cyan">validationAction</div>
+      <div class="desc"><b class="c-pink">error</b> → bloqueia o inválido.<br><b class="c-green">warn</b> → deixa entrar, só registra no log.</div>
+    </div>
+    <div class="panel frag" data-anim="right">
+      <div class="tag c-cyan">validationLevel</div>
+      <div class="desc"><b class="c-pink">strict</b> → valida todo insert e update.<br><b class="c-green">moderate</b> → não cobra de quem <b>já era</b> inválido.</div>
+    </div>
+  </div>
+  <div class="note frag">Padrão: <b>strict + error</b>.</div>
+</section>
+
+<section class="scene" data-accent="green" data-name="Apertando a regra no legado">
+  <div class="kicker frag" data-anim="left">Estratégia real de migração</div>
+  <div class="mid frag" data-anim="left">Apertar a regra <span class="c-green">sem derrubar a loja</span></div>
+  <div class="steps frag stagger">
+    <div><div class="k c-cyan">1 · moderate + warn</div><p>Liga a regra. Nada quebra. Lê o log.</p></div>
+    <div class="arrow">→</div>
+    <div><div class="k c-amber">2 · corrige o legado</div><p>Script com <span class="mono">updateMany</span> nos antigos.</p></div>
+    <div class="arrow">→</div>
+    <div><div class="k c-pink">3 · strict + error</div><p>Agora é lei.</p></div>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="green" data-name="collMod · código">
+  <div class="kicker">Mudando a regra de uma coleção que já existe</div>
+  <div class="codex">
+    <div class="win frag" data-anim="up"><div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">mongosh</span></div>
+<pre class="code s hl">db.runCommand({
+  collMod: "pedidos",
+  validator: { $jsonSchema: { required: ["total"] } },
+  validationLevel: "moderate",
+  validationAction: "warn"
+})</pre></div>
+    <div class="explain">
+      <div class="ex frag" data-lines="2"><em>collMod</em> = <b>coll</b>ection <b>mod</b>ify. Sem recriar, sem perder dado.</div>
+      <div class="ex frag" data-lines="3">O validator novo <b>substitui</b> o anterior inteiro.</div>
+      <div class="ex frag" data-lines="4"><em>moderate</em>: documentos antigos inválidos não travam updates.</div>
+      <div class="ex frag" data-lines="5"><em>warn</em>: não bloqueia nada, só registra no log. Zero downtime.</div>
+    </div>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="cyan" data-name="moderate · ao vivo">
+  <div class="mid frag" data-anim="down"><span class="c-cyan">moderate</span> na prática</div>
+  <div class="sim tw" data-coll="pedidos" data-mode="table" data-fields="_id,status,total"></div>
+  <script type="text/plain" class="setup">
+db.pedidos.insertMany([
+  { _id: 900, status: "pago", total: "35,00" },
+  { _id: 1045, status: "pago", total: NumberDecimal("59.90") }
+])
+db.runCommand({ collMod: "pedidos",
+  validator: { $jsonSchema: { properties: { total: { bsonType: "decimal" } } } },
+  validationLevel: "moderate" })
+  </script>
+  <div class="says">
+    <div class="say frag">Regra nova: total decimal. O pedido <b>900</b> é antigo e já está fora dela.</div>
+<script type="text/plain" class="frag step">
+db.pedidos.updateOne({ _id: 900 },
+  { $set: { status: "enviado" } })
+</script>
+    <div class="say frag">Já era inválido → <em>moderate</em> deixa o update passar. A operação não trava.</div>
+<script type="text/plain" class="frag step">
+db.pedidos.updateOne({ _id: 1045 },
+  { $set: { total: "60" } })
+</script>
+    <div class="say frag">Um documento válido <span class="c-pink"><b>não pode virar</b></span> inválido. Erro.</div>
+  </div>
+</section>
+
+<section class="scene mid-center" data-accent="green" data-name="Embutir ou referenciar">
+  <div class="big frag" data-anim="down">Como você <span class="c-green">lê</span> decide como você <span class="c-cyan">guarda</span>.</div>
+  <div class="row st" style="width:100%">
+    <div class="panel frag" data-anim="left" style="border-color:var(--green);text-align:left">
+      <div class="tag c-green">Embutir</div>
+      <div class="desc">Documento dentro do documento. Lido <b>sempre junto</b>.</div>
+    </div>
+    <div class="vs frag">ou</div>
+    <div class="panel frag" data-anim="right" style="border-color:var(--cyan);text-align:left">
+      <div class="tag c-cyan">Referenciar</div>
+      <div class="desc">Guarda só o _id do outro. Dado <b>compartilhado</b> ou que <b>cresce sem fim</b>.</div>
+    </div>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="green" data-name="Um pedido de verdade">
+  <div class="kicker">Caso real · como um e-commerce guarda um pedido</div>
+  <div class="codex">
+    <div class="win frag" data-anim="up"><div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">loja.pedidos</span></div>
+<pre class="code s hl">{
+  _id: 1042,
+  cliente_id: 7,
+  endereco: { rua: "Av. Brasil, 500", cidade: "Campinas" },
+  itens: [
+    { sku: "SKU-102", qtd: 1, preco: NumberDecimal("399.90") }
+  ],
+  total: NumberDecimal("399.90")
+}</pre></div>
+    <div class="explain">
+      <div class="ex frag" data-lines="3"><em>cliente_id</em> → <b>referência</b>. O cliente é um só, com vários pedidos, e muda sozinho.</div>
+      <div class="ex frag" data-lines="4"><em>endereço embutido</em> = foto da hora da compra. A Marina se mudou? O pedido antigo <b>não muda</b>.</div>
+      <div class="ex frag" data-lines="5-7"><em>itens com o preço da época</em>. A Air Fryer subiu de preço? A nota antiga continua certa.</div>
+      <div class="ex frag" data-lines="1-9">Uma leitura traz o pedido inteiro. <b>Sem JOIN.</b></div>
+    </div>
+  </div>
+</section>
+
+<section class="scene" data-accent="cyan" data-name="Post viral · 16 MB">
+  <div class="kicker frag" data-anim="left">Caso real · o post que viralizou</div>
+  <div class="mid frag" data-anim="left">Comentários <span class="c-cyan">dentro</span> do post?</div>
+  <div class="big frag" data-anim="pop">300 mil comentários → <span class="c-pink">16 MB</span></div>
+  <div class="note frag">Limite de <b>um documento</b>: 16 MB. Array que cresce sem limite bate no teto.</div>
+  <div class="mid frag" data-anim="up">Cresce sem fim → <span class="c-cyan">referência</span> <span class="c-mut mono" style="font-size:.6em">comentarios.post_id</span></div>
+</section>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<!-- ═════════════════════ FECHAMENTO ═════════════════════ -->
+
+<section class="scene tight" data-accent="green" data-name="Cola 1/7 · Métodos">
+  <div class="mid frag" data-anim="left"><span class="c-mut mono" style="font-size:.55em">COLA 1/7</span> Métodos de escrita</div>
+  <div class="cg frag stagger">
+    <div class="ci"><span class="op">insertOne</span><span class="ds">insere 1</span><code>insertOne({ nome: "Ana" })</code></div>
+    <div class="ci"><span class="op">insertMany</span><span class="ds">insere vários</span><code>insertMany([a, b], { ordered: false })</code></div>
+    <div class="ci"><span class="op">updateOne</span><span class="ds">altera o 1º que bater</span><code>updateOne({ _id: 7 }, { $set: { … } })</code></div>
+    <div class="ci"><span class="op">updateMany</span><span class="ds">altera todos que batem</span><code>updateMany({ cat: "tv" }, { $mul: { … } })</code></div>
+    <div class="ci"><span class="op">replaceOne</span><span class="ds">troca o doc inteiro</span><code>replaceOne({ _id: 7 }, { nome: "Ana" })</code></div>
+    <div class="ci"><span class="op">findOneAndUpdate</span><span class="ds">altera e devolve</span><code>{ returnDocument: "after" }</code></div>
+    <div class="ci"><span class="op">deleteOne · deleteMany</span><span class="ds">apaga</span><code>deleteMany({ status: "cancelado" })</code></div>
+    <div class="ci"><span class="op">bulkWrite</span><span class="ds">várias operações, 1 ida</span><code>bulkWrite([{ insertOne: … }, { updateOne: … }])</code></div>
+    <div class="ci"><span class="op">opções</span><span class="ds">ajustam o comportamento</span><code>upsert · ordered · returnDocument · arrayFilters</code></div>
+    <div class="ci"><span class="op">findOne · find</span><span class="ds">ler (e checar se existe)</span><code>findOne({ _id: 7 }, { _id: 1 })</code></div>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="blue" data-name="Cola 2/7 · Filtros: comparação e lógicos">
+  <div class="mid frag" data-anim="left"><span class="c-mut mono" style="font-size:.55em">COLA 2/7</span> Filtros: <span class="c-blue">comparação e lógicos</span></div>
+  <div class="cg frag stagger">
+    <div class="ci"><span class="op">$eq</span><span class="ds">igual (é o padrão)</span><code>{ status: "pago" }</code></div>
+    <div class="ci"><span class="op">$ne</span><span class="ds">diferente</span><code>{ status: { $ne: "cancelado" } }</code></div>
+    <div class="ci"><span class="op">$gt · $gte</span><span class="ds">maior · maior ou igual</span><code>{ preco: { $gte: 100 } }</code></div>
+    <div class="ci"><span class="op">$lt · $lte</span><span class="ds">menor · menor ou igual</span><code>{ estoque: { $lt: 5 } }</code></div>
+    <div class="ci"><span class="op">$in</span><span class="ds">está na lista</span><code>{ status: { $in: ["pago", "enviado"] } }</code></div>
+    <div class="ci"><span class="op">$nin</span><span class="ds">fora da lista</span><code>{ uf: { $nin: ["SP", "RJ"] } }</code></div>
+    <div class="ci"><span class="op">$and</span><span class="ds">todas (vírgula já faz)</span><code>{ $and: [{ vip: true }, { uf: "SP" }] }</code></div>
+    <div class="ci"><span class="op">$or</span><span class="ds">pelo menos uma</span><code>{ $or: [{ vip: true }, { cupom: "BF" }] }</code></div>
+    <div class="ci"><span class="op">$not</span><span class="ds">nega a condição</span><code>{ preco: { $not: { $gt: 100 } } }</code></div>
+    <div class="ci"><span class="op">$nor</span><span class="ds">nenhuma delas</span><code>{ $nor: [{ uf: "SP" }, { vip: true }] }</code></div>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="purple" data-name="Cola 3/7 · Filtros: elemento, texto e arrays">
+  <div class="mid frag" data-anim="left"><span class="c-mut mono" style="font-size:.55em">COLA 3/7</span> Filtros: <span class="c-purple">elemento, texto e arrays</span></div>
+  <div class="cg frag stagger">
+    <div class="ci"><span class="op">$exists</span><span class="ds">o campo existe?</span><code>{ telefone: { $exists: false } }</code></div>
+    <div class="ci"><span class="op">$type</span><span class="ds">tipo BSON</span><code>{ total: { $type: "string" } }</code></div>
+    <div class="ci"><span class="op">$regex</span><span class="ds">padrão de texto</span><code>{ nome: { $regex: /^mar/i } }</code></div>
+    <div class="ci"><span class="op">$expr</span><span class="ds">compara 2 campos</span><code>{ $expr: { $lt: ["$estoque", "$minimo"] } }</code></div>
+    <div class="ci"><span class="op">$mod</span><span class="ds">resto da divisão</span><code>{ numero: { $mod: [2, 0] } }</code></div>
+    <div class="ci"><span class="op">$text</span><span class="ds">busca textual (índice text)</span><code>{ $text: { $search: "air fryer" } }</code></div>
+    <div class="ci"><span class="op">$all</span><span class="ds">array tem todos</span><code>{ tags: { $all: ["gamer", "pc"] } }</code></div>
+    <div class="ci"><span class="op">$elemMatch</span><span class="ds">1 item bate tudo</span><code>{ itens: { $elemMatch: { qtd: { $gt: 2 } } } }</code></div>
+    <div class="ci"><span class="op">$size</span><span class="ds">tamanho exato</span><code>{ carrinho: { $size: 0 } }</code></div>
+    <div class="ci"><span class="op">"a.b"</span><span class="ds">dot notation</span><code>{ "endereco.cidade": "Campinas" }</code></div>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="green" data-name="Cola 4/7 · Update: campos">
+  <div class="mid frag" data-anim="left"><span class="c-mut mono" style="font-size:.55em">COLA 4/7</span> Atualização: <span class="c-green">campos</span></div>
+  <div class="cg frag stagger">
+    <div class="ci"><span class="op">$set</span><span class="ds">define / cria</span><code>{ $set: { status: "pago" } }</code></div>
+    <div class="ci"><span class="op">$unset</span><span class="ds">remove o campo</span><code>{ $unset: { cpf: "" } }</code></div>
+    <div class="ci"><span class="op">$inc</span><span class="ds">soma (negativo subtrai)</span><code>{ $inc: { estoque: -1 } }</code></div>
+    <div class="ci"><span class="op">$mul</span><span class="ds">multiplica</span><code>{ $mul: { preco: 0.8 } }</code></div>
+    <div class="ci"><span class="op">$rename</span><span class="ds">renomeia</span><code>{ $rename: { fone: "telefone" } }</code></div>
+    <div class="ci"><span class="op">$min</span><span class="ds">grava se for menor</span><code>{ $min: { menorPreco: 79.9 } }</code></div>
+    <div class="ci"><span class="op">$max</span><span class="ds">grava se for maior</span><code>{ $max: { recorde: 120 } }</code></div>
+    <div class="ci"><span class="op">$currentDate</span><span class="ds">data/hora do servidor</span><code>{ $currentDate: { atualizadoEm: true } }</code></div>
+    <div class="ci"><span class="op">$setOnInsert</span><span class="ds">só se o upsert inserir</span><code>{ $setOnInsert: { criadoEm: new Date() } }</code></div>
+    <div class="ci"><span class="op">upsert: true</span><span class="ds">não achou? cria</span><code>updateOne(filtro, update, { upsert: true })</code></div>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="purple" data-name="Cola 5/7 · Update: arrays">
+  <div class="mid frag" data-anim="left"><span class="c-mut mono" style="font-size:.55em">COLA 5/7</span> Atualização: <span class="c-purple">arrays</span></div>
+  <div class="cg frag stagger">
+    <div class="ci"><span class="op">$push</span><span class="ds">adiciona no fim</span><code>{ $push: { carrinho: "SKU-1" } }</code></div>
+    <div class="ci"><span class="op">$each</span><span class="ds">vários de uma vez</span><code>{ $push: { tags: { $each: ["a", "b"] } } }</code></div>
+    <div class="ci"><span class="op">$slice</span><span class="ds">limita o tamanho</span><code>{ $each: [x], $slice: -10 }</code></div>
+    <div class="ci"><span class="op">$sort</span><span class="ds">ordena ao inserir</span><code>{ $each: [x], $sort: { data: -1 } }</code></div>
+    <div class="ci"><span class="op">$position</span><span class="ds">insere na posição</span><code>{ $each: [x], $position: 0 }</code></div>
+    <div class="ci"><span class="op">$addToSet</span><span class="ds">adiciona sem repetir</span><code>{ $addToSet: { celulares: "cel-1" } }</code></div>
+    <div class="ci"><span class="op">$pull</span><span class="ds">remove por valor/condição</span><code>{ $pull: { itens: { qtd: 0 } } }</code></div>
+    <div class="ci"><span class="op">$pullAll</span><span class="ds">remove vários valores</span><code>{ $pullAll: { tags: ["a", "b"] } }</code></div>
+    <div class="ci"><span class="op">$pop</span><span class="ds">tira o 1º (-1) ou último (1)</span><code>{ $pop: { fila: -1 } }</code></div>
+    <div class="ci"><span class="op">$ · $[] · $[x]</span><span class="ds">posicionais</span><code>{ $set: { "itens.$[].ok": true } }</code></div>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="orange" data-name="Cola 6/7 · $jsonSchema">
+  <div class="mid frag" data-anim="left"><span class="c-mut mono" style="font-size:.55em">COLA 6/7</span> Schema: <span class="c-orange">regras do $jsonSchema</span></div>
+  <div class="cg frag stagger">
+    <div class="ci"><span class="op">bsonType</span><span class="ds">tipo do valor</span><code>"string" "int" "decimal" "date" "bool" "array" "object" "objectId"</code></div>
+    <div class="ci"><span class="op">required</span><span class="ds">campos obrigatórios</span><code>required: ["email", "nome"]</code></div>
+    <div class="ci"><span class="op">properties</span><span class="ds">regra por campo</span><code>properties: { email: { bsonType: "string" } }</code></div>
+    <div class="ci"><span class="op">enum</span><span class="ds">valores permitidos</span><code>enum: ["pendente", "pago", "enviado"]</code></div>
+    <div class="ci"><span class="op">minimum · maximum</span><span class="ds">faixa numérica</span><code>idade: { minimum: 18, maximum: 120 }</code></div>
+    <div class="ci"><span class="op">minLength · maxLength</span><span class="ds">tamanho do texto</span><code>senha: { minLength: 8 }</code></div>
+    <div class="ci"><span class="op">pattern</span><span class="ds">regex no texto</span><code>email: { pattern: "^.+@.+$" }</code></div>
+    <div class="ci"><span class="op">minItems · items</span><span class="ds">regras de array</span><code>itens: { minItems: 1, items: { … } }</code></div>
+    <div class="ci"><span class="op">additionalProperties</span><span class="ds">false = proíbe campo extra</span><code>// liste o _id em properties!</code></div>
+    <div class="ci"><span class="op">description</span><span class="ds">mensagem pra quem lê</span><code>total: { description: "em reais" }</code></div>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="orange" data-name="Cola 7/7 · Schema, índice e transação">
+  <div class="mid frag" data-anim="left"><span class="c-mut mono" style="font-size:.55em">COLA 7/7</span> Schema, índice e <span class="c-orange">transação</span></div>
+  <div class="cg frag stagger">
+    <div class="ci"><span class="op">createCollection</span><span class="ds">cria já com regra</span><code>createCollection("pedidos", { validator })</code></div>
+    <div class="ci"><span class="op">collMod</span><span class="ds">muda regra existente</span><code>runCommand({ collMod: "pedidos", validator })</code></div>
+    <div class="ci"><span class="op">validationLevel</span><span class="ds">quem é validado</span><code>"strict" · "moderate" · "off"</code></div>
+    <div class="ci"><span class="op">validationAction</span><span class="ds">o que faz no erro</span><code>"error" (bloqueia) · "warn" (só log)</code></div>
+    <div class="ci"><span class="op">createIndex unique</span><span class="ds">garante valor único</span><code>createIndex({ email: 1 }, { unique: true })</code></div>
+    <div class="ci"><span class="op">achar fora da regra</span><span class="ds">antes de apertar</span><code>find({ $nor: [{ $jsonSchema: regra }] })</code></div>
+    <div class="ci"><span class="op">ver a regra atual</span><span class="ds">inspecionar</span><code>db.getCollectionInfos({ name: "pedidos" })</code></div>
+    <div class="ci"><span class="op">transação</span><span class="ds">tudo ou nada</span><code>s.startTransaction() … commitTransaction() / abortTransaction()</code></div>
+    <div class="ci"><span class="op">bulkWrite</span><span class="ds">N escritas, 1 ida (não desfaz)</span><code>bulkWrite([{ updateOne: … }, { deleteOne: … }])</code></div>
+    <div class="ci"><span class="op">sem FOREIGN KEY</span><span class="ds">valide na aplicação</span><code>findOne({ _id: id }) antes de inserir</code></div>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="pink" data-name="Erros clássicos 1/2">
+  <div class="mid frag" data-anim="down">🚫 Erros que <span class="c-pink">todo mundo comete</span></div>
+  <div class="errs frag stagger">
+    <div class="er"><div class="et">1 · Update sem operador<span>→ “Update document requires atomic operators”</span></div>
+      <div class="ln2 bad">updateOne({ _id: "SKU-101" }, { estoque: 10 })</div>
+      <div class="ln2 good">updateOne({ _id: "SKU-101" }, { $set: { estoque: 10 } })</div></div>
+    <div class="er"><div class="et">2 · Buscar _id como texto<span>→ volta vazio, “mas o id existe!”</span></div>
+      <div class="ln2 bad">find({ _id: "65f1c2a9e4b0a1b2c3d4e5f6" })</div>
+      <div class="ln2 good">find({ _id: ObjectId("65f1c2a9e4b0a1b2c3d4e5f6") })</div></div>
+    <div class="er"><div class="et">3 · $set no subdocumento inteiro<span>→ o “uf” sumiu</span></div>
+      <div class="ln2 bad">$set: { endereco: { cidade: "Recife" } }</div>
+      <div class="ln2 good">$set: { "endereco.cidade": "Recife" }</div></div>
+    <div class="er"><div class="et">4 · updateOne achando que muda todos<span>→ modifiedCount: 1</span></div>
+      <div class="ln2 bad">updateOne({}, { $set: { promo: true } })</div>
+      <div class="ln2 good">updateMany({}, { $set: { promo: true } })</div></div>
+  </div>
+</section>
+
+<section class="scene tight" data-accent="pink" data-name="Erros clássicos 2/2">
+  <div class="mid frag" data-anim="down">🚫 Mais 4 <span class="c-pink">pegadinhas</span></div>
+  <div class="errs frag stagger">
+    <div class="er"><div class="et">5 · Chave repetida no filtro<span>→ o JavaScript fica só com a última</span></div>
+      <div class="ln2 bad">find({ preco: { $gt: 50 }, preco: { $lt: 100 } })</div>
+      <div class="ln2 good">find({ preco: { $gt: 50, $lt: 100 } })</div></div>
+    <div class="er"><div class="et">6 · Número entre aspas<span>→ texto só compara com texto: volta vazio</span></div>
+      <div class="ln2 bad">find({ estoque: { $gt: "10" } })</div>
+      <div class="ln2 good">find({ estoque: { $gt: 10 } })</div></div>
+    <div class="er"><div class="et">7 · $push com array<span>→ vira array dentro de array</span></div>
+      <div class="ln2 bad">$push: { tags: ["bf", "promo"] }</div>
+      <div class="ln2 good">$push: { tags: { $each: ["bf", "promo"] } }</div></div>
+    <div class="er"><div class="et">8 · null também acha quem não tem o campo<span>→ traz a mais</span></div>
+      <div class="ln2 bad">find({ telefone: null })</div>
+      <div class="ln2 good">find({ telefone: { $exists: false } })</div></div>
+  </div>
+</section>
+
+<section class="scene mid-center" data-accent="green" data-name="Playground · abertura">
+  <div class="kicker frag" data-anim="down">Ao vivo</div>
+  <div class="huge frag" data-anim="zoom"><span class="glow">Playground</span></div>
+  <div class="lead frag" style="text-align:center;max-width:none">Agora a gente testa — <b>vocês escolhem</b> o comando.</div>
+  <div class="note frag" data-anim="blur">Enter ou ▶ Enviar roda · os botões <span class="c-pink">vermelhos</span> são erros clássicos</div>
+</section>
+
+<section class="scene pgscene" data-accent="green" data-name="Playground">
+  <div class="sim play" data-coll="produtos" data-mode="docs"></div>
+  <script type="text/plain" class="setup">
+db.produtos.insertMany([
+  { _id: "SKU-101", nome: "Fone", preco: NumberDecimal("89.90"), estoque: 37, tags: ["audio"] },
+  { _id: "SKU-102", nome: "Air Fryer", preco: NumberDecimal("399.90"), estoque: 1 },
+  { _id: "SKU-402", nome: "Camiseta", preco: NumberDecimal("49.90"), estoque: 120 }
+])
+db.clientes.insertMany([
+  { _id: ObjectId("65f1c2a9e4b0a1b2c3d4e5f6"), nome: "Marina", telefone: "(19) 99999-0000", endereco: { cidade: "Campinas", uf: "SP" } },
+  { _id: ObjectId("65f1c2a9e4b0a1b2c3d4e5f7"), nome: "João", endereco: { cidade: "Recife", uf: "PE" } },
+  { _id: ObjectId("65f1c2a9e4b0a1b2c3d4e5f8"), nome: "Caio", telefone: null }
+])
+  </script>
+  <div class="pg-why noclick"></div>
+  <div class="pg noclick">
+    <textarea class="pg-in" spellcheck="false" placeholder='db.produtos.find({ estoque: { $lt: 5 } })'></textarea>
+    <button class="send" title="Rodar (Enter)">▶ Enviar</button>
+    <div class="chs">
+      <button data-cmd='db.produtos.find({ estoque: { $lt: 5 } })'>find</button>
+      <button data-cmd='db.produtos.updateOne({ _id: "SKU-101" }, { $inc: { estoque: -1 } })'>$inc</button>
+      <button data-cmd='db.produtos.insertOne({ nome: "Mouse", preco: NumberDecimal("59.90") })'>insertOne</button>
+      <button data-cmd='db.produtos.updateMany({}, { $addToSet: { tags: "black-friday" } })'>$addToSet</button>
+      <button class="bad" data-cmd='db.produtos.updateOne({ _id: "SKU-101" }, { estoque: 10 })' data-why='<b>Erro 1:</b> update sem operador. O mongosh recusa. ✔ <em>{ $set: { estoque: 10 } }</em>'>sem $set</button>
+      <button class="bad" data-cmd='db.clientes.find({ _id: "65f1c2a9e4b0a1b2c3d4e5f6" })' data-why='<b>Erro 2:</b> o _id é ObjectId, não texto → <b>[ ]</b>. ✔ <em>ObjectId("65f1…e5f6")</em>'>_id texto</button>
+      <button class="bad" data-cmd='db.clientes.updateOne({ nome: "Marina" }, { $set: { endereco: { cidade: "Recife" } } })' data-why='<b>Erro 3:</b> trocou o subdocumento inteiro, o <b>uf sumiu</b>. ✔ <em>{ $set: { "endereco.cidade": "Recife" } }</em>'>$set subdoc</button>
+      <button class="bad" data-cmd='db.produtos.updateOne({}, { $set: { promo: true } })' data-why='<b>Erro 4:</b> updateOne com filtro vazio muda <b>só o 1º</b>. ✔ <em>updateMany</em>'>updateOne({})</button>
+      <button class="bad" data-cmd='db.produtos.find({ preco: { $gt: 50 }, preco: { $lt: 100 } })' data-why='<b>Erro 5:</b> chave repetida — só o <b>$lt: 100</b> valeu (veio a camiseta de 49,90). ✔ <em>{ preco: { $gt: 50, $lt: 100 } }</em>'>chave dupla</button>
+      <button class="bad" data-cmd='db.produtos.find({ estoque: { $gt: "10" } })' data-why='<b>Erro 6:</b> "10" é texto; número nunca é maior que texto → <b>[ ]</b>. ✔ <em>$gt: 10</em>'>"10" texto</button>
+      <button class="bad" data-cmd='db.produtos.updateOne({ _id: "SKU-101" }, { $push: { tags: ["bf", "promo"] } })' data-why='<b>Erro 7:</b> virou <b>array dentro de array</b>. ✔ <em>{ $push: { tags: { $each: ["bf", "promo"] } } }</em>'>$push array</button>
+      <button class="bad" data-cmd='db.clientes.find({ telefone: null })' data-why='<b>Erro 8:</b> trouxe o Caio (null) <b>e o João (sem o campo)</b>. ✔ <em>{ telefone: { $exists: false } }</em>'>null</button>
+    </div>
+  </div>
+</section>
+
+<section class="scene" data-accent="green" data-name="Fontes">
+  <div class="kicker frag" data-anim="left">&gt; referencias()</div>
+  <div class="mid frag" data-anim="left">Fontes</div>
+  <div class="col frag" data-anim="up" style="gap:.45em">
+    <div class="note">📘 MongoDB Manual · CRUD — mongodb.com/docs/manual/crud</div>
+    <div class="note">📘 Query, Projection &amp; Update Operators — mongodb.com/docs/manual/reference/operator</div>
+    <div class="note">📘 Schema Validation — mongodb.com/docs/manual/core/schema-validation</div>
+    <div class="note">📘 Data Modeling — mongodb.com/docs/manual/data-modeling</div>
+    <div class="note">💬 Stack Overflow e MongoDB Community Forums — erros clássicos</div>
+    <div class="note">🤖 Claude (Anthropic) — apoio na estrutura, exemplos e design</div>
+  </div>
+</section>
+
+<section class="scene mid-center" data-accent="pink" data-name="Kahoot">
+  <div class="col frag stagger" style="align-items:center">
+    <div class="kicker" style="color:var(--pink)">Agora é hora do</div>
+    <div class="huge glow" style="--accent:var(--pink)">KAHOOT 🎮</div>
+    <div class="lead" style="text-align:center;max-width:none">Celular na mão → <b>kahoot.it</b></div>
+  </div>
+</section>
+
+</div><!--/stage-->
+
+<!-- hidden controls -->
+<button id="navbtn" title="Controles">☰</button>
+<div id="controls">
+  <button id="btnPrev" title="Anterior">◀</button>
+  <span class="count" id="count">1 / 1</span>
+  <button id="btnNext" title="Próximo">▶</button>
+  <button id="btnMap" title="Mapa de cenas (O)">☰</button>
+  <button id="btnFull" title="Tela cheia (F)">⤢</button>
+  <button id="btnHelp" title="Atalhos (?)">?</button>
+</div>
+
+<div id="help" class="ovl"><div class="box">
+  <h2>Atalhos</h2>
+  <ul>
+    <li><kbd>→ / Espaço</kbd> avançar (revela o próximo item / roda o próximo comando)</li>
+    <li><kbd>←</kbd> voltar (o simulador volta junto)</li>
+    <li><kbd>O</kbd> mapa de cenas — cor na borda = Parte 1 / 2 / 3</li>
+    <li><kbd>T</kbd> cronômetro da parte atual e total (só pra quem apresenta)</li>
+    <li><kbd>F</kbd> tela cheia</li>
+    <li><kbd>Home</kbd> / <kbd>End</kbd> início / fim</li>
+    <li><kbd>?</kbd> abre/fecha esta ajuda · <kbd>Esc</kbd> fecha</li>
+    <li>Clique na tela também avança · o botão <kbd>☰</kbd> apagado no canto inferior esquerdo abre os controles</li>
+    <li>Com o comando digitando, avançar só termina a animação</li>
+  </ul>
+</div></div>
+
+<div id="ov" class="ovl"><div class="box">
+  <h2>Cenas</h2>
+  <div class="grid"></div>
+</div></div>
+
+<script>
+/* ═════════════════ mini MongoDB (roda só no navegador) ═════════════════ */
+var Mongo=(function(){
+  function OID(h){this.h=h}
+  function Dec(s){this.s=String(s)}
+  function MErr(name,msg,extra){this.name=name;this.message=msg;this.extra=extra||'';this.hit=[]}
+
+  function isPlain(v){return v!==null&&typeof v==='object'&&!Array.isArray(v)&&!(v instanceof OID)&&!(v instanceof Dec)&&!(v instanceof Date)&&!(v instanceof RegExp)}
+  function isNum(v){return typeof v==='number'||v instanceof Dec}
+  function num(v){return v instanceof Dec?parseFloat(v.s):v}
+  function btype(v){
+    if(v===null)return 'null';
+    if(v instanceof OID)return 'objectId';
+    if(v instanceof Dec)return 'decimal';
+    if(v instanceof Date)return 'date';
+    if(Array.isArray(v))return 'array';
+    if(typeof v==='string')return 'string';
+    if(typeof v==='boolean')return 'bool';
+    if(typeof v==='number')return Number.isInteger(v)?(Math.abs(v)<2147483648?'int':'long'):'double';
+    return 'object';
+  }
+  function clone(v){
+    if(Array.isArray(v))return v.map(clone);
+    if(v instanceof Date)return new Date(v.getTime());
+    if(isPlain(v)){var o={};for(var k in v)o[k]=clone(v[k]);return o}
+    return v;
+  }
+  function canon(v){
+    if(v===undefined)return 'U';
+    if(v instanceof OID)return 'O'+v.h;
+    if(v instanceof Dec)return 'N'+parseFloat(v.s)+'/'+v.s;
+    if(v instanceof Date)return 'T'+v.getTime();
+    if(Array.isArray(v))return '['+v.map(canon).join(',')+']';
+    if(isPlain(v))return '{'+Object.keys(v).map(function(k){return JSON.stringify(k)+':'+canon(v[k])}).join(',')+'}';
+    if(typeof v==='number')return 'N'+v;
+    return JSON.stringify(v);
+  }
+  function eq(a,b){ if(isNum(a)&&isNum(b))return num(a)===num(b); return canon(a)===canon(b) }
+
+  /* aritmética decimal exata (Decimal128 simplificado) */
+  function parts(x){var s=(x instanceof Dec?x.s:String(x)).trim(),neg=s[0]==='-';if(neg||s[0]==='+')s=s.slice(1);
+    var i=s.indexOf('.');return {neg:neg,ip:(i<0?s:s.slice(0,i))||'0',fp:i<0?'':s.slice(i+1)}}
+  function nd(x){return parts(x).fp.length}
+  function toBig(x,d){var p=parts(x);var b=BigInt(p.ip+(p.fp+'0'.repeat(d)).slice(0,d));return p.neg?-b:b}
+  function fromBig(b,d){var neg=b<BigInt(0);if(neg)b=-b;var s=b.toString();
+    if(d>0){while(s.length<=d)s='0'+s;s=s.slice(0,s.length-d)+'.'+s.slice(s.length-d)}return (neg?'-':'')+s}
+  function add(a,b){if(!(a instanceof Dec)&&!(b instanceof Dec))return a+b;var d=Math.max(nd(a),nd(b));return new Dec(fromBig(toBig(a,d)+toBig(b,d),d))}
+  function mul(a,b){if(!(a instanceof Dec)&&!(b instanceof Dec))return a*b;var da=nd(a),db=nd(b);return new Dec(fromBig(toBig(a,da)*toBig(b,db),da+db))}
+
+  /* caminhos "a.b.c" */
+  function getRaw(d,p){var ps=p.split('.'),cur=d;for(var i=0;i<ps.length;i++){if(cur==null||typeof cur!=='object')return undefined;cur=cur[ps[i]]}return cur}
+  function getPath(d,p){
+    var ps=p.split('.'),cur=d;
+    for(var i=0;i<ps.length;i++){
+      if(cur==null)return undefined;
+      if(Array.isArray(cur)&&!/^\d+$/.test(ps[i])){var rest=ps.slice(i).join('.'),out=[];
+        cur.forEach(function(x){var v=isPlain(x)?getPath(x,rest):undefined;if(v!==undefined)out=out.concat(Array.isArray(v)?v:[v])});return out.length?out:undefined}
+      cur=cur[ps[i]];
+    }
+    return cur;
+  }
+  function setPath(d,p,v){var ps=p.split('.'),cur=d;for(var i=0;i<ps.length-1;i++){if(cur[ps[i]]==null||typeof cur[ps[i]]!=='object')cur[ps[i]]={};cur=cur[ps[i]]}cur[ps[ps.length-1]]=v}
+  function unsetPath(d,p){var ps=p.split('.'),cur=d;for(var i=0;i<ps.length-1;i++){cur=cur&&cur[ps[i]];if(cur==null)return}delete cur[ps[ps.length-1]]}
+
+  /* filtros */
+  function isOpObj(c){if(!isPlain(c))return false;var ks=Object.keys(c);return ks.length>0&&ks.every(function(k){return k[0]==='$'})}
+  function cmp(x,y){if(isNum(x)&&isNum(y))return num(x)-num(y);if(typeof x==='string'&&typeof y==='string')return x<y?-1:x>y?1:0;if(x instanceof Date&&y instanceof Date)return x-y;return NaN}
+  function testOp(val,op,arg,cond){
+    var arr=Array.isArray(val)?val:[val];
+    switch(op){
+      case '$options':return true;
+      case '$regex':var re=arg instanceof RegExp?arg:new RegExp(arg,(cond&&cond.$options)||'');
+        return arr.some(function(x){return typeof x==='string'&&re.test(x)});
+      case '$not':return !matchVal(val,arg);
+      case '$all':return Array.isArray(val)&&arg.every(function(a){return matchVal(val,a)});
+      case '$mod':return arr.some(function(x){return isNum(x)&&num(x)%arg[0]===arg[1]});
+      case '$eq':return matchVal(val,arg);
+      case '$ne':return !matchVal(val,arg);
+      case '$gt':return arr.some(function(x){return cmp(x,arg)>0});
+      case '$gte':return arr.some(function(x){return cmp(x,arg)>=0});
+      case '$lt':return arr.some(function(x){return cmp(x,arg)<0});
+      case '$lte':return arr.some(function(x){return cmp(x,arg)<=0});
+      case '$in':return arg.some(function(a){return matchVal(val,a)});
+      case '$nin':return !arg.some(function(a){return matchVal(val,a)});
+      case '$exists':return (val!==undefined)===!!arg;
+      case '$type':return arr.some(function(x){var t=btype(x);return t===arg||(arg==='number'&&['int','long','double','decimal'].indexOf(t)>=0)});
+      case '$size':return Array.isArray(val)&&val.length===arg;
+      case '$elemMatch':return Array.isArray(val)&&val.some(function(x){return isOpObj(arg)?matchVal(x,arg):(isPlain(x)&&match(x,arg))});
+    }
+    throw new MErr('MongoServerError','unknown operator: '+op);
+  }
+  function matchVal(val,cond){
+    if(cond instanceof RegExp)return (Array.isArray(val)?val:[val]).some(function(x){return typeof x==='string'&&cond.test(x)});
+    if(isOpObj(cond))return Object.keys(cond).every(function(op){return testOp(val,op,cond[op],cond)});
+    if(cond===null&&val===undefined)return true; // { campo: null } também acha quem não tem o campo
+    if(eq(val,cond))return true;
+    if(Array.isArray(val))return val.some(function(x){return eq(x,cond)});
+    return false;
+  }
+  function match(d,f){
+    return Object.keys(f||{}).every(function(k){
+      if(k==='$or')return f[k].some(function(g){return match(d,g)});
+      if(k==='$and')return f[k].every(function(g){return match(d,g)});
+      if(k==='$nor')return !f[k].some(function(g){return match(d,g)});
+      if(k==='$expr')return !!evalExpr(f[k],d);
+      if(k==='$jsonSchema')return !checkSchema(d,f[k],'');
+      if(k==='$text')throw new MErr('MongoServerError','text index required for $text query');
+      return matchVal(getPath(d,k),f[k]);
+    });
+  }
+  function evalExpr(e,d){
+    if(typeof e==='string'&&e[0]==='$')return getRaw(d,e.slice(1));
+    if(!isPlain(e))return e;
+    var op=Object.keys(e)[0],a=e[op];
+    if(op==='$and')return a.every(function(x){return evalExpr(x,d)});
+    if(op==='$or')return a.some(function(x){return evalExpr(x,d)});
+    var x=evalExpr(a[0],d),y=evalExpr(a[1],d),c=cmp(x,y);
+    switch(op){case '$eq':return eq(x,y);case '$ne':return !eq(x,y);case '$gt':return c>0;case '$gte':return c>=0;case '$lt':return c<0;case '$lte':return c<=0}
+    throw new MErr('MongoServerError','operador de $expr não suportado no simulador: '+op);
+  }
+  function project(d,p){
+    var ks=Object.keys(p||{});if(!ks.length)return clone(d);
+    var o;
+    if(ks.some(function(k){return !!p[k]})){
+      o={};if(p._id!==0&&p._id!==false)o._id=d._id;
+      ks.forEach(function(k){if(k!=='_id'&&p[k]){var v=getRaw(d,k);if(v!==undefined)setPath(o,k,clone(v))}});
+    }else{o=clone(d);ks.forEach(function(k){unsetPath(o,k)})}
+    return o;
+  }
+  /* "itens.$[].ok" → "itens.0.ok", "itens.1.ok"… */
+  function expandAll(d,p){
+    var i=p.indexOf('.$[]');if(i<0)return [p];
+    var pre=p.slice(0,i),rest=p.slice(i+4),arr=getRaw(d,pre);
+    if(!Array.isArray(arr))return [];
+    var out=[];arr.forEach(function(x,j){out=out.concat(expandAll(d,pre+'.'+j+rest))});return out;
+  }
+
+  /* operadores de atualização */
+  function hasOps(u){var ks=Object.keys(u||{});return ks.length>0&&ks.every(function(k){return k[0]==='$'})}
+  function applyUpdate(d,u,ins){
+    Object.keys(u).forEach(function(op){
+      var spec=u[op];
+      if(!isPlain(spec))throw new MErr('MongoServerError','Modifiers operate on fields but we found type '+btype(spec)+' instead');
+      Object.keys(spec).forEach(function(p0){
+        if(/\.\$(\.|$)|\.\$\[\w+\]/.test(p0))throw new MErr('MongoServerError','operador posicional $ / $[id] não suportado no simulador (use $[])');
+        expandAll(d,p0).forEach(function(p){
+        var v=spec[p0],cur=getRaw(d,p),each;
+        switch(op){
+          case '$set':setPath(d,p,clone(v));break;
+          case '$setOnInsert':if(ins)setPath(d,p,clone(v));break;
+          case '$unset':unsetPath(d,p);break;
+          case '$inc':
+            if(!isNum(v))throw new MErr('MongoServerError','Cannot increment with non-numeric argument: {'+p+': '+fmt(v,{q:'"',inline:true})+'}');
+            if(cur===undefined)setPath(d,p,clone(v));
+            else{if(!isNum(cur))throw new MErr('MongoServerError',"Cannot apply $inc to a value of non-numeric type. Field '"+p+"' is "+btype(cur));setPath(d,p,add(cur,v))}
+            break;
+          case '$mul':
+            if(cur===undefined)setPath(d,p,v instanceof Dec?new Dec('0'):0);
+            else{if(!isNum(cur))throw new MErr('MongoServerError',"Cannot apply $mul to a value of non-numeric type. Field '"+p+"' is "+btype(cur));setPath(d,p,mul(cur,v))}
+            break;
+          case '$min':if(cur===undefined||cmp(v,cur)<0)setPath(d,p,clone(v));break;
+          case '$max':if(cur===undefined||cmp(v,cur)>0)setPath(d,p,clone(v));break;
+          case '$rename':if(cur!==undefined){unsetPath(d,p);setPath(d,v,cur)}break;
+          case '$currentDate':setPath(d,p,new Date());break;
+          case '$push':
+            each=isPlain(v)&&('$each' in v)?v.$each.map(clone):[clone(v)];
+            if(cur===undefined)cur=[];else if(!Array.isArray(cur))throw new MErr('MongoServerError',"The field '"+p+"' must be an array but is of type "+btype(cur));
+            if(isPlain(v)&&v.$position!==undefined){var pos=v.$position<0?Math.max(0,cur.length+v.$position):v.$position;cur=cur.slice(0,pos).concat(each,cur.slice(pos))}
+            else cur=cur.concat(each);
+            if(isPlain(v)&&v.$sort!==undefined){var so=v.$sort;cur=cur.slice().sort(function(x,y){
+              if(isPlain(so)){var ks=Object.keys(so);for(var q=0;q<ks.length;q++){var r=cmp(getRaw(x,ks[q]),getRaw(y,ks[q]))*so[ks[q]];if(r)return r}return 0}
+              return (cmp(x,y)||0)*so})}
+            if(isPlain(v)&&v.$slice!==undefined){var s=v.$slice;cur=s===0?[]:(s<0?cur.slice(s):cur.slice(0,s))}
+            setPath(d,p,cur);break;
+          case '$addToSet':
+            each=isPlain(v)&&('$each' in v)?v.$each:[v];
+            if(cur===undefined)cur=[];else if(!Array.isArray(cur))throw new MErr('MongoServerError',"Cannot apply $addToSet to non-array field '"+p+"'");
+            each.forEach(function(x){if(!cur.some(function(y){return eq(y,x)}))cur=cur.concat([clone(x)])});
+            setPath(d,p,cur);break;
+          case '$pull':
+            if(Array.isArray(cur))setPath(d,p,cur.filter(function(x){
+              return !(isOpObj(v)?matchVal(x,v):(isPlain(v)&&isPlain(x)?match(x,v):eq(x,v)));
+            }));
+            break;
+          case '$pop':if(Array.isArray(cur))setPath(d,p,v<0?cur.slice(1):cur.slice(0,-1));break;
+          case '$pullAll':if(Array.isArray(cur))setPath(d,p,cur.filter(function(x){return !v.some(function(y){return eq(x,y)})}));break;
+          default:throw new MErr('MongoServerError','Unknown modifier: '+op);
+        }
+        });
+      });
+    });
+    return d;
+  }
+
+  /* $jsonSchema (subconjunto) */
+  function checkSchema(v,s,path){
+    if(!s)return null;
+    var where=path||'documento',t=btype(v);
+    if(s.bsonType){
+      var ts=[].concat(s.bsonType);
+      var ok=ts.some(function(x){return x===t||(x==='number'&&['int','long','double','decimal'].indexOf(t)>=0)||(x==='long'&&t==='int')});
+      if(!ok)return where+': esperado '+ts.join(' | ')+', veio '+t;
+    }
+    if(s.enum&&!s.enum.some(function(e){return eq(e,v)}))return where+': '+fmt(v,{q:'"',inline:true})+' não está no enum';
+    if(isNum(v)){
+      if(s.minimum!=null&&num(v)<s.minimum)return where+': menor que '+s.minimum;
+      if(s.maximum!=null&&num(v)>s.maximum)return where+': maior que '+s.maximum;
+    }
+    if(typeof v==='string'){
+      if(s.minLength!=null&&v.length<s.minLength)return where+': texto curto demais';
+      if(s.pattern&&!(new RegExp(s.pattern)).test(v))return where+': não bate com o pattern';
+    }
+    if(isPlain(v)){
+      var req=s.required||[];
+      for(var i=0;i<req.length;i++)if(v[req[i]]===undefined)return 'campo obrigatório ausente: '+(path?path+'.':'')+req[i];
+      var props=s.properties||{};
+      for(var k in props){if(v[k]!==undefined){var e=checkSchema(v[k],props[k],(path?path+'.':'')+k);if(e)return e}}
+      if(s.additionalProperties===false){for(var k2 in v)if(!(k2 in props))return 'campo não permitido: '+k2}
+    }
+    if(Array.isArray(v)){
+      if(s.minItems!=null&&v.length<s.minItems)return where+': precisa de pelo menos '+s.minItems+' item';
+      if(s.maxItems!=null&&v.length>s.maxItems)return where+': itens demais';
+      if(s.items){for(var j=0;j<v.length;j++){var e2=checkSchema(v[j],s.items,where+'['+j+']');if(e2)return e2}}
+    }
+    return null;
+  }
+
+  /* formatação estilo mongosh */
+  function fmt(v,o,ind){
+    ind=ind||0;var q=o.q||"'";
+    if(v===null)return 'null';
+    if(v===undefined)return 'undefined';
+    if(v instanceof OID)return 'ObjectId('+q+v.h+q+')';
+    if(v instanceof Dec)return 'Decimal128('+q+v.s+q+')';
+    if(v instanceof Date)return 'ISODate('+q+v.toISOString()+q+')';
+    if(typeof v==='string')return q+v.split(q).join('\\'+q)+q;
+    if(typeof v!=='object')return String(v);
+    var pad='  '.repeat(ind+1),end='  '.repeat(ind),w=o.w||40,ps,one;
+    if(Array.isArray(v)){
+      if(!v.length)return '[]';
+      ps=v.map(function(x){return fmt(x,o,ind+1)});
+      one='[ '+ps.join(', ')+' ]';
+      if(o.inline||(one.indexOf('\n')<0&&one.length+ind*2<=w))return one;
+      return '[\n'+ps.map(function(p){return pad+p}).join(',\n')+'\n'+end+']';
+    }
+    var ks=Object.keys(v);if(!ks.length)return '{}';
+    ps=ks.map(function(k){return (/^[A-Za-z_$][\w$]*$/.test(k)?k:q+k+q)+': '+fmt(v[k],o,ind+1)});
+    one='{ '+ps.join(', ')+' }';
+    if(o.inline||(one.indexOf('\n')<0&&one.length+ind*2<=w))return one;
+    return '{\n'+ps.map(function(p){return pad+p}).join(',\n')+'\n'+end+'}';
+  }
+
+  /* engine */
+  var BASE=Math.floor(Date.now()/1000);
+  function Engine(){this.reset()}
+  Engine.prototype.reset=function(){
+    this.colls={};this.seed=20261026;this.warns=[];this.snapshot=null;this.sess=this.session();this.vars={};
+    var r='';for(var i=0;i<10;i++)r+=Math.floor(this.rand()*16).toString(16);
+    this.proc=r;this.counter=Math.floor(this.rand()*0xffff00);this.t=0;
+  };
+  Engine.prototype.rand=function(){this.seed=(this.seed*1103515245+12345)%2147483648;return this.seed/2147483648};
+  Engine.prototype.oid=function(){
+    this.t++;this.counter=(this.counter+1)%0xffffff;
+    return new OID((BASE+this.t).toString(16).padStart(8,'0')+this.proc+this.counter.toString(16).padStart(6,'0'));
+  };
+  Engine.prototype.coll=function(name){
+    if(!this.colls[name])this.colls[name]={name:name,docs:[],validator:null,level:'strict',action:'error',uniq:[]};
+    return this.colls[name];
+  };
+  Engine.prototype.checkUnique=function(c,doc,skip){
+    c.uniq.forEach(function(u){
+      var v=getRaw(doc,u.f);if(v===undefined)return;
+      if(c.docs.some(function(d){return d!==skip&&eq(getRaw(d,u.f),v)})){
+        var o={};o[u.f]=v;
+        var e=new MErr('MongoServerError','E11000 duplicate key error collection: loja.'+c.name+' index: '+u.name+' dup key: '+fmt(o,{q:'"',inline:true}));
+        c.docs.forEach(function(d){if(d!==skip&&eq(getRaw(d,u.f),v))e.hit.push(canon(d._id))});
+        throw e;
+      }
+    });
+  };
+  Engine.prototype.validate=function(c,doc){
+    if(c.level==='off')return null;
+    if(!c.validator||!c.validator.$jsonSchema)return null;
+    return checkSchema(doc,c.validator.$jsonSchema,'');
+  };
+  Engine.prototype.insert=function(c,doc){
+    doc=clone(doc);
+    if(doc._id===undefined){var o={_id:this.oid()};for(var k in doc)o[k]=doc[k];doc=o}
+    else if(Object.keys(doc)[0]!=='_id'){var o2={_id:doc._id};for(var k2 in doc)if(k2!=='_id')o2[k2]=doc[k2];doc=o2}
+    if(c.docs.some(function(d){return eq(d._id,doc._id)})){
+      var e=new MErr('MongoServerError','E11000 duplicate key error collection: loja.'+c.name+' index: _id_ dup key: { _id: '+fmt(doc._id,{q:'"',inline:true})+' }');
+      e.hit=[canon(doc._id)];throw e;
+    }
+    this.checkUnique(c,doc,null);
+    var bad=this.validate(c,doc);
+    if(bad){if(c.action==='error'){var ev=new MErr('MongoServerError','Document failed validation','↳ '+bad);throw ev}this.warns.push(bad)}
+    c.docs.push(doc);
+    return doc._id;
+  };
+  Engine.prototype.update=function(c,filter,upd,opts,multi,replace){
+    var self=this;opts=opts||{};
+    if(replace){if(hasOps(upd))throw new MErr('MongoInvalidArgumentError','Replacement document must not contain atomic operators')}
+    else if(!hasOps(upd))throw new MErr('MongoInvalidArgumentError','Update document requires atomic operators');
+    var idx=[];c.docs.forEach(function(d,i){if(match(d,filter))idx.push(i)});
+    if(!multi)idx=idx.slice(0,1);
+    var res={acknowledged:true,insertedId:null,matchedCount:idx.length,modifiedCount:0,upsertedCount:0};
+    idx.forEach(function(i){
+      var d=c.docs[i],before=canon(d),wasValid=!self.validate(c,d),nd;
+      if(replace){nd={_id:d._id};var r=clone(upd);for(var k in r)if(k!=='_id')nd[k]=r[k]}
+      else nd=applyUpdate(clone(d),upd,false);
+      if(canon(nd)===before)return;
+      if(c.validator&&(c.level==='strict'||wasValid)){
+        var bad=self.validate(c,nd);
+        if(bad){if(c.action==='error')throw new MErr('MongoServerError','Document failed validation','↳ '+bad);self.warns.push(bad)}
+      }
+      self.checkUnique(c,nd,d);
+      c.docs[i]=nd;res.modifiedCount++;
+    });
+    if(!idx.length&&opts.upsert){
+      var base={};
+      Object.keys(filter||{}).forEach(function(k){if(k[0]!=='$'&&!isOpObj(filter[k]))setPath(base,k,clone(filter[k]))});
+      var nd2;
+      if(replace){nd2={};if(base._id!==undefined)nd2._id=base._id;var r2=clone(upd);for(var k3 in r2)nd2[k3]=r2[k3]}
+      else nd2=applyUpdate(base,upd,true);
+      res.insertedId=this.insert(c,nd2);res.upsertedCount=1;
+    }
+    return res;
+  };
+  Engine.prototype.api=function(name){
+    var self=this,c=this.coll(name);
+    return {
+      insertOne:function(doc){return {acknowledged:true,insertedId:self.insert(c,doc)}},
+      insertMany:function(docs,opts){
+        var ordered=!(opts&&opts.ordered===false),ids={},n=0,errs=[];
+        for(var i=0;i<docs.length;i++){
+          try{ids[i]=self.insert(c,docs[i]);n++}
+          catch(e){if(!(e instanceof MErr))throw e;errs.push(e);if(ordered)break}
+        }
+        if(errs.length){
+          var be=new MErr('MongoBulkWriteError',errs[0].message,'Result: { insertedCount: '+n+' }'+(errs.length>1?' · '+errs.length+' erros':''));
+          errs.forEach(function(x){be.hit=be.hit.concat(x.hit)});throw be;
+        }
+        return {acknowledged:true,insertedIds:ids};
+      },
+      find:function(f,p){return c.docs.filter(function(d){return match(d,f)}).map(function(d){return project(d,p)})},
+      findOne:function(f,p){var d=c.docs.filter(function(d){return match(d,f)})[0];return d?project(d,p):null},
+      findOneAndDelete:function(f){var i=-1;c.docs.some(function(d,k){if(match(d,f)){i=k;return true}return false});return i>=0?c.docs.splice(i,1)[0]:null},
+      findOneAndReplace:function(f,r,o){
+        var i=-1;c.docs.some(function(d,k){if(match(d,f)){i=k;return true}return false});
+        var before=i>=0?clone(c.docs[i]):null;self.update(c,f,r,o,false,true);
+        return o&&o.returnDocument==='after'&&i>=0?clone(c.docs[i]):before;
+      },
+      countDocuments:function(f){return c.docs.filter(function(d){return match(d,f)}).length},
+      updateOne:function(f,u,o){return self.update(c,f,u,o,false,false)},
+      updateMany:function(f,u,o){return self.update(c,f,u,o,true,false)},
+      replaceOne:function(f,u,o){return self.update(c,f,u,o,false,true)},
+      findOneAndUpdate:function(f,u,o){
+        o=o||{};var after=o.returnDocument==='after'||o.returnNewDocument===true;
+        var i=-1;c.docs.some(function(d,k){if(match(d,f)){i=k;return true}return false});
+        var before=i>=0?clone(c.docs[i]):null;
+        var r=self.update(c,f,u,o,false,false);
+        if(!after)return before;
+        if(i>=0)return clone(c.docs[i]);
+        if(r.upsertedCount){var id=r.insertedId;return clone(c.docs.filter(function(d){return eq(d._id,id)})[0])}
+        return null;
+      },
+      bulkWrite:function(ops,o){
+        var ordered=!(o&&o.ordered===false),api=this,errs=[],
+            r={acknowledged:true,insertedCount:0,insertedIds:{},matchedCount:0,modifiedCount:0,deletedCount:0,upsertedCount:0,upsertedIds:{}};
+        for(var i=0;i<ops.length;i++){
+          var t=Object.keys(ops[i])[0],a=ops[i][t],x;
+          try{
+            if(t==='insertOne'){r.insertedIds[i]=self.insert(c,a.document);r.insertedCount++}
+            else if(t==='updateOne'||t==='updateMany'||t==='replaceOne'){
+              x=self.update(c,a.filter,t==='replaceOne'?a.replacement:a.update,{upsert:a.upsert},t==='updateMany',t==='replaceOne');
+              r.matchedCount+=x.matchedCount;r.modifiedCount+=x.modifiedCount;
+              if(x.upsertedCount){r.upsertedCount++;r.upsertedIds[i]=x.insertedId}
+            }
+            else if(t==='deleteOne'||t==='deleteMany'){r.deletedCount+=api[t](a.filter).deletedCount}
+            else throw new MErr('MongoInvalidArgumentError','operação desconhecida no bulkWrite: '+t);
+          }catch(e){if(!(e instanceof MErr))throw e;errs.push(e);if(ordered)break}
+        }
+        if(errs.length){var be=new MErr('MongoBulkWriteError',errs[0].message,'Result: { matchedCount: '+r.matchedCount+', modifiedCount: '+r.modifiedCount+', insertedCount: '+r.insertedCount+' }');throw be}
+        return r;
+      },
+      deleteOne:function(f){var i=-1;c.docs.some(function(d,k){if(match(d,f)){i=k;return true}return false});if(i>=0)c.docs.splice(i,1);return {acknowledged:true,deletedCount:i>=0?1:0}},
+      deleteMany:function(f){var n=c.docs.length;c.docs=c.docs.filter(function(d){return !match(d,f)});return {acknowledged:true,deletedCount:n-c.docs.length}},
+      aggregate:function(pipe){
+        var docs=c.docs.map(clone);
+        function ev(e,d){return typeof e==='string'&&e[0]==='$'?getRaw(d,e.slice(1)):e}
+        pipe.forEach(function(st){
+          var op=Object.keys(st)[0],a=st[op];
+          if(op==='$match')docs=docs.filter(function(d){return match(d,a)});
+          else if(op==='$limit')docs=docs.slice(0,a);
+          else if(op==='$count'){var o={};o[a]=docs.length;docs=[o]}
+          else if(op==='$sort'){var k=Object.keys(a);docs.sort(function(x,y){for(var i=0;i<k.length;i++){var r=cmp(getRaw(x,k[i]),getRaw(y,k[i]))*a[k[i]];if(r)return r}return 0})}
+          else if(op==='$group'){
+            var g={},order=[];
+            docs.forEach(function(d){
+              var key=ev(a._id,d),ck=canon(key===undefined?null:key);
+              if(!g[ck]){g[ck]={out:{_id:key===undefined?null:key},n:{}};order.push(ck)}
+              Object.keys(a).forEach(function(f){
+                if(f==='_id')return;var acc=Object.keys(a[f])[0],val=ev(a[f][acc],d),out=g[ck].out;
+                if(acc==='$sum'){if(out[f]===undefined)out[f]=0;if(isNum(val))out[f]=add(out[f],val)}
+                else if(acc==='$avg'){g[ck].n[f]=g[ck].n[f]||{s:0,c:0};if(isNum(val)){g[ck].n[f].s=add(g[ck].n[f].s,val);g[ck].n[f].c++}out[f]=g[ck].n[f].c?num(g[ck].n[f].s)/g[ck].n[f].c:null}
+                else if(acc==='$max'){if(val!==undefined&&(out[f]===undefined||cmp(val,out[f])>0))out[f]=val}
+                else if(acc==='$min'){if(val!==undefined&&(out[f]===undefined||cmp(val,out[f])<0))out[f]=val}
+              });
+            });
+            docs=order.map(function(k){return g[k].out});
+          }
+          else throw new MErr('MongoServerError','Unrecognized pipeline stage name: '+op);
+        });
+        return docs;
+      },
+      createIndex:function(keys,o){
+        var name=Object.keys(keys).map(function(k){return k+'_'+keys[k]}).join('_');
+        if(o&&o.unique&&!c.uniq.some(function(u){return u.name===name}))c.uniq.push({f:Object.keys(keys)[0],name:name});
+        return name;
+      },
+      drop:function(){delete self.colls[name];return true}
+    };
+  };
+  /* sessão com transação: start tira uma "foto" das collections, abort volta pra ela */
+  Engine.prototype.session=function(){
+    var self=this;
+    return {
+      getDatabase:function(){return self.db()},
+      startTransaction:function(){
+        if(self.snapshot)throw new MErr('MongoServerError','Transaction already in progress on this session.');
+        self.snapshot={};
+        Object.keys(self.colls).forEach(function(k){var c=self.colls[k];
+          self.snapshot[k]={name:c.name,docs:c.docs.map(clone),validator:c.validator,level:c.level,action:c.action,uniq:c.uniq.slice()}});
+      },
+      commitTransaction:function(){
+        if(!self.snapshot)throw new MErr('MongoServerError','No transaction started');
+        self.snapshot=null;
+      },
+      abortTransaction:function(){
+        if(!self.snapshot)throw new MErr('MongoServerError','No transaction started');
+        self.colls=self.snapshot;self.snapshot=null;
+      },
+      endSession:function(){}
+    };
+  };
+  Engine.prototype.db=function(){
+    var self=this;
+    return new Proxy({},{get:function(t,p){
+      if(typeof p==='symbol'||p==='then')return undefined;
+      if(p==='createCollection')return function(name,o){
+        if(self.colls[name])throw new MErr('MongoServerError','Collection loja.'+name+' already exists.');
+        var c=self.coll(name);o=o||{};c.validator=o.validator||null;c.level=o.validationLevel||'strict';c.action=o.validationAction||'error';return {ok:1};
+      };
+      if(p==='runCommand')return function(cmd){
+        if(cmd.collMod){var c=self.coll(cmd.collMod);
+          if(cmd.validator)c.validator=cmd.validator;if(cmd.validationLevel)c.level=cmd.validationLevel;if(cmd.validationAction)c.action=cmd.validationAction;return {ok:1}}
+        throw new MErr('MongoServerError','comando não suportado no simulador');
+      };
+      if(p==='getCollectionNames')return function(){return Object.keys(self.colls)};
+      if(p==='getMongo')return function(){return {startSession:function(){return self.session()}}};
+      if(p==='getCollection')return function(n){return self.api(n)};
+      return self.api(p);
+    }});
+  };
+  Engine.prototype.exec=function(cmd,asStatements){
+    var db=this.db(),self=this,w0=this.warns.length;
+    var ObjectId=function(h){return h?new OID(h):self.oid()};
+    var NumberDecimal=function(s){return new Dec(s)};
+    var NumberInt=function(n){return parseInt(n,10)};
+    var ISODate=function(s){return s?new Date(s):new Date()};
+    try{
+      // vars: variáveis que o setup da cena deixa prontas (ex.: carrinho, loja)
+      var vk=Object.keys(this.vars),
+          args=['db','ObjectId','NumberDecimal','Decimal128','NumberInt','ISODate','session','s','vars'].concat(vk),fn;
+      if(!asStatements){
+        // expressão (o normal); se não for, roda como instruções (const, if…)
+        try{fn=new Function(args.join(','),'"use strict";return (\n'+cmd+'\n)')}catch(se){if(!(se instanceof SyntaxError))throw se}
+      }
+      if(!fn)fn=new Function(args.join(','),'"use strict";'+cmd);
+      var vars=this.vars,
+          v=fn.apply(null,[db,ObjectId,NumberDecimal,NumberDecimal,NumberInt,ISODate,this.sess,this.sess,vars].concat(vk.map(function(k){return vars[k]})));
+      var warn=this.warns.slice(w0);
+      return {ok:true,value:v,warn:warn};
+    }catch(e){
+      if(e instanceof MErr)return {ok:false,err:e};
+      return {ok:false,err:{name:e.name||'Error',message:e.message,extra:'',hit:[]}};
+    }
+  };
+
+  return {Engine:Engine,OID:OID,Dec:Dec,fmt:fmt,canon:canon,getRaw:getRaw};
+})();
+
+/* ═════════════════ realce de sintaxe ═════════════════ */
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+var RX=/(\/\/[^\n]*)|("(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*')|(\$[A-Za-z_]\w*)|(-?\b\d+(?:\.\d+)?\b)|([A-Za-z_À-ú][\wÀ-ú]*)/g;
+function punc(s){return s.split('\n').map(function(x){return x?'<span class="t-p">'+esc(x)+'</span>':''}).join('\n')}
+function hl(src){
+  var out='',last=0,m;RX.lastIndex=0;
+  while((m=RX.exec(src))){
+    out+=punc(src.slice(last,m.index));
+    var t=m[0],c;
+    if(m[1])c='t-c';else if(m[2])c='t-s';else if(m[3])c='t-o';else if(m[4])c='t-n';
+    else{
+      var nx=(src.slice(RX.lastIndex).match(/^\s*(.)/)||[])[1],prev=src[m.index-1];
+      if(/^(true|false|null|undefined|new|const|let|var|if|else|throw|return|await)$/.test(t))c='t-b';
+      else if(nx===':')c='t-k';
+      else if(nx==='('&&prev==='.')c='t-m';
+      else if(nx==='(')c='t-f';
+      else c='t-d';
+    }
+    out+='<span class="'+c+'">'+esc(t)+'</span>';last=RX.lastIndex;
+  }
+  return out+punc(src.slice(last));
+}
+/* valor dentro da visualização da coleção */
+function vh(v){
+  if(v===null)return '<span class="t-b">null</span>';
+  if(v instanceof Mongo.OID)return '<span class="t-f">ObjectId</span><span class="t-p">(</span><span class="t-s">"'+v.h.slice(0,8)+'…'+v.h.slice(-4)+'"</span><span class="t-p">)</span>';
+  if(v instanceof Mongo.Dec)return '<span class="t-n">'+esc(v.s)+'</span><span class="ty">dec</span>';
+  if(v instanceof Date)return '<span class="t-f">ISODate</span><span class="t-p">(</span><span class="t-s">"'+v.toISOString().slice(0,16).replace('T',' ')+'"</span><span class="t-p">)</span>';
+  if(typeof v==='string')return '<span class="t-s">"'+esc(v)+'"</span>';
+  if(typeof v==='number')return '<span class="t-n">'+v+'</span>';
+  if(typeof v==='boolean')return '<span class="t-b">'+v+'</span>';
+  if(Array.isArray(v))return '<span class="t-p">[</span>'+v.map(vh).join('<span class="t-p">, </span>')+'<span class="t-p">]</span>';
+  return '<span class="t-p">{ </span>'+Object.keys(v).map(function(k){return '<span class="t-k">'+esc(k)+'</span><span class="t-p">: </span>'+vh(v[k])}).join('<span class="t-p">, </span>')+'<span class="t-p"> }</span>';
+}
+
+/* ═════════════════ simulador por cena ═════════════════ */
+var PROMPT='<span class="pr">loja&gt; </span>';
+function SimView(el,scene){
+  this.el=el;this.scene=scene;this.eng=new Mongo.Engine();
+  this.collName=this.coll0=el.getAttribute('data-coll');this.mode=el.getAttribute('data-mode')||'docs';
+  var f=el.getAttribute('data-fields');this.fields=f?f.split(','):null;
+  this.setup=[].slice.call(scene.querySelectorAll('script.setup')).map(function(s){return s.textContent});
+  el.innerHTML='<div class="term"><div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">mongosh · loja (simulador)</span></div><div class="scr"></div></div>'+
+    '<div class="coll'+(this.mode==='chips'?' chips':'')+(el.classList.contains('play')?' scroll':'')+'"><div class="bar"><span class="lbl">loja.'+this.collName+'</span><span class="cnt"></span></div><div class="docs"></div></div>';
+  this.scr=el.querySelector('.scr');this.docsEl=el.querySelector('.docs');this.cnt=el.querySelector('.cnt');
+  this.n=-1;this.snap={};this.busy=false;
+}
+SimView.prototype.cols=function(){
+  var fs=parseFloat(getComputedStyle(this.scr).fontSize)||20;
+  return Math.max(24,Math.floor((this.scr.clientWidth-fs*1.8)/(fs*0.6))-1);
+};
+SimView.prototype.run=function(cmd){
+  var r=this.eng.exec(cmd,false);
+  if(r.ok){
+    var v=r.value,txt;
+    if(v===undefined)txt='// ok (sem valor de retorno)';
+    else txt=Mongo.fmt(v,{q:"'",w:this.cols()});
+    if(r.warn.length)txt+='\n// log do servidor (warn): '+r.warn[0];
+    return {html:hl(txt),hit:[],err:false};
+  }
+  var e=r.err;
+  return {html:'<span class="e1">'+esc(e.name+': '+e.message)+'</span>'+(e.extra?'\n<span class="e2">'+esc(e.extra)+'</span>':''),hit:e.hit||[],err:true};
+};
+SimView.prototype.cancel=function(){
+  if(this.raf)cancelAnimationFrame(this.raf);if(this.to)clearTimeout(this.to);
+  this.raf=this.to=null;this.busy=false;this.finishFn=null;
+};
+SimView.prototype.idle=function(){this.scr.style.fontSize='';this.scr.innerHTML='<div class="cmdl">'+PROMPT+'<span class="cur"></span></div>'};
+SimView.prototype.show=function(cmd,res,anim){
+  this.scr.innerHTML='<div class="cmdl">'+PROMPT+hl(cmd)+'</div><div class="res'+(res.err?' err':'')+'"'+(anim?'':' style="animation:none"')+'>'+res.html+'</div>';
+  fitText(this.scr);
+  this.renderColl(anim,res.hit);
+};
+SimView.prototype.refit=function(){fitText(this.scr);if(!this.el.classList.contains('play'))fitText(this.docsEl)};
+/* diminui a fonte até o conteúdo caber — saída nunca fica cortada */
+function fitText(el){
+  el.style.fontSize='';el.scrollTop=0;
+  if(!el.clientHeight)return;
+  var base=parseFloat(getComputedStyle(el).fontSize),s=base;
+  while((el.scrollHeight>el.clientHeight+2||el.scrollWidth>el.clientWidth+2)&&s>base*0.76){s-=base*0.03;el.style.fontSize=s+'px'}
+  // ainda não coube? mostra o fim (o resultado), que é o que importa
+  if(el.scrollHeight>el.clientHeight+2)el.scrollTop=el.scrollHeight;
+}
+SimView.prototype.rebuild=function(steps){
+  this.cancel();this.eng.reset();
+  this.setColl(this.coll0);
+  var self=this;
+  this.setup.forEach(function(s){var r=self.eng.exec(s,true);if(!r.ok)console.error('setup',r.err)});
+  this.snap={};
+  if(!steps.length){this.idle();this.renderColl(false,[]);return}
+  var last=null;steps.forEach(function(c){last={cmd:c,res:self.run(c)}});
+  this.show(last.cmd,last.res,false);
+};
+SimView.prototype.setColl=function(name){
+  if(!name||name===this.collName)return;
+  this.collName=name;this.snap={};
+  this.el.querySelector('.coll .lbl').textContent='loja.'+name;
+};
+SimView.prototype.play=function(cmd,fast){
+  this.cancel();
+  // no playground, a visualização segue a collection do último comando
+  // playground: mostra a collection do comando já no estado de ANTES, pra o diff aparecer depois
+  if(this.el.classList.contains('play')){
+    var m=/db\.(\w+)\s*\.\s*\w+\s*\(/.exec(cmd);
+    if(m&&m[1]!==this.collName){this.setColl(m[1]);this.renderColl(false,[])}
+  }
+  var self=this,res=this.run(cmd),line;
+  // mede com o resultado final pra fonte não pular no meio da animação
+  this.scr.innerHTML='<div class="cmdl">'+PROMPT+hl(cmd)+'</div><div class="res'+(res.err?' err':'')+'">'+res.html+'</div>';
+  fitText(this.scr);
+  this.scr.innerHTML='<div class="cmdl"></div>';line=this.scr.firstChild;
+  var total=cmd.length,dur=fast?0:Math.min(1500,Math.max(550,total*15)),t0=performance.now();
+  this.busy=true;
+  function done(){self.cancel();self.show(cmd,res,true)}
+  this.finishFn=done;
+  if(!dur){done();return}
+  var shown=-1;
+  function frame(t){
+    var k=Math.max(0,Math.min(total,Math.ceil((t-t0)/dur*total)));
+    if(k!==shown){shown=k;line.innerHTML=PROMPT+hl(cmd.slice(0,k))+'<span class="cur"></span>'}
+    // pausa curta depois de digitar, aí mostra o resultado
+    if(t-t0<dur+280)self.raf=requestAnimationFrame(frame);
+    else done();
+  }
+  this.raf=requestAnimationFrame(frame);
+};
+SimView.prototype.finish=function(){if(this.finishFn)this.finishFn()};
+SimView.prototype.sync=function(steps,animate){
+  if(animate&&this.n>=0&&steps.length===this.n+1){this.n=steps.length;this.play(steps[steps.length-1])}
+  else if(steps.length!==this.n){this.n=steps.length;this.rebuild(steps)}
+};
+SimView.prototype.leave=function(){this.cancel();this.n=-1};
+SimView.prototype.renderColl=function(anim,hits){
+  var c=this.eng.colls[this.collName],docs=c?c.docs:[],prev=this.snap,next={},html='',fields=this.fields;
+  hits=hits||[];
+  this.cnt.textContent=docs.length+(docs.length===1?' documento':' documentos');
+  if(!docs.length){this.docsEl.innerHTML='<div class="empty">(coleção vazia)</div>';this.snap={};return}
+  if(this.mode==='table'){
+    html='<table class="tbl"><thead><tr>'+fields.map(function(f){return '<th>'+esc(f)+'</th>'}).join('')+'</tr></thead><tbody>';
+    docs.forEach(function(d){
+      var id=Mongo.canon(d._id),p=prev[id],row={},cls=[];
+      if(anim&&!p)cls.push('new');if(hits.indexOf(id)>=0)cls.push('hit');
+      html+='<tr class="'+cls.join(' ')+'">'+fields.map(function(f){
+        var v=Mongo.getRaw(d,f),h=v===undefined?'<span class="none">—</span>':vh(v),tc='';row[f]=h;
+        if(anim&&p&&p[f]!==h){tc=' class="chg"';if(v===undefined)h='<span class="del">'+p[f]+'</span>'}
+        return '<td'+tc+'>'+h+'</td>';
+      }).join('')+'</tr>';
+      next[id]=row;
+    });
+    html+='</tbody></table>';
+  }else if(this.mode==='chips'){
+    docs.forEach(function(d){
+      var id=Mongo.canon(d._id),cls='doc chip';
+      if(anim&&!prev[id])cls+=' new';if(hits.indexOf(id)>=0)cls+=' hit';
+      html+='<div class="'+cls+'">'+esc(d._id instanceof Mongo.OID?d._id.h.slice(-6):d._id)+'</div>';next[id]={};
+    });
+  }else{
+    docs.forEach(function(d){
+      var id=Mongo.canon(d._id),p=prev[id],row={},cls='doc';
+      if(anim&&!p)cls+=' new';if(hits.indexOf(id)>=0)cls+=' hit';
+      var keys=fields||Object.keys(d),inner='';
+      keys.forEach(function(k){
+        var v=Mongo.getRaw(d,k);if(v===undefined)return;
+        var h='<span class="t-k">'+esc(k)+'</span><span class="t-p">: </span>'+vh(v);row[k]=h;
+        inner+='<span class="f'+(anim&&p&&p[k]!==h?(p[k]?' chg':' add'):'')+'">'+h+'</span>';
+      });
+      if(anim&&p)Object.keys(p).forEach(function(k){if(!(k in row))inner+='<span class="f del">'+p[k]+'</span>'});
+      html+='<div class="'+cls+'">'+inner+'</div>';next[id]=row;
+    });
+  }
+  this.docsEl.innerHTML=html;this.snap=next;
+  if(this.el.classList.contains('play')){var t=this.docsEl.querySelector('.new,.chg,.add');if(t)t.scrollIntoView({block:'nearest'})}
+  else fitText(this.docsEl);
+};
+
+/* ═════════════════ navegação ═════════════════ */
+(function(){
+  var scenes=[].slice.call(document.querySelectorAll('.scene'));
+  var si=0,fi=1,lastSi=-1;
+  function frags(s){return [].slice.call(s.querySelectorAll('.frag'))}
+  var totals=scenes.map(function(s){return frags(s).length});
+  var grand=totals.reduce(function(a,b){return a+b},0);
+
+  // código com realce + linhas numeradas
+  [].forEach.call(document.querySelectorAll('pre.hl'),function(pre){
+    var src=pre.textContent.replace(/^\n/,'').replace(/\s+$/,'');
+    pre.innerHTML=hl(src).split('\n').map(function(l){return '<span class="ln">'+(l||' ')+'</span>'}).join('');
+  });
+  [].forEach.call(document.querySelectorAll('.ci code'),function(c){c.innerHTML=hl(c.textContent)});
+  // simuladores
+  scenes.forEach(function(s){var el=s.querySelector('.sim');if(el)s._sim=new SimView(el,s)});
+  // parte de cada integrante: começa no divisor marcado com data-part
+  var part='1';scenes.forEach(function(s){part=s.getAttribute('data-part')||part;s._part=part});
+
+  // ObjectId gerado agora
+  (function(){
+    var ts=Math.floor(Date.now()/1000),r='',c='';
+    for(var i=0;i<10;i++)r+=Math.floor(Math.random()*16).toString(16);
+    for(var j=0;j<6;j++)c+=Math.floor(Math.random()*16).toString(16);
+    document.getElementById('oid').innerHTML='<span class="g1">'+ts.toString(16)+'</span><span class="g2">'+r+'</span><span class="g3">'+c+'</span>';
+    document.getElementById('oidDate').textContent=new Date(ts*1000).toLocaleString('pt-BR');
+  })();
+
+  function setAccent(name){
+    document.documentElement.style.setProperty('--accent','var(--'+(name||'green')+')');
+  }
+  function parseLines(s){
+    var set={};(s||'').split(',').forEach(function(p){var m=p.trim().split('-');if(!m[0])return;var a=+m[0],b=+(m[1]||m[0]);for(var i=a;i<=b;i++)set[i]=1});return set;
+  }
+  function render(fwd){
+    var sc=scenes[si],changed=si!==lastSi;
+    if(changed){
+      if(lastSi>=0&&scenes[lastSi]._sim)scenes[lastSi]._sim.leave();
+      scenes.forEach(function(s,i){s.classList.toggle('active',i===si)});
+      frags(sc).forEach(function(f){f.classList.remove('show')});
+      void sc.offsetWidth;
+      lastSi=si;
+    }
+    setAccent(sc.getAttribute('data-accent'));
+    var fr=frags(sc);
+    fr.forEach(function(f,i){f.classList.toggle('show',i<fi)});
+
+    // explicação: só a última visível fica na tela
+    var lastEx=-1,lastSay=-1;
+    fr.forEach(function(f,i){
+      if(i>=fi)return;
+      if(f.classList.contains('ex'))lastEx=i;
+      if(f.classList.contains('say'))lastSay=i;
+      else if(f.classList.contains('step'))lastSay=-1;
+    });
+    fr.forEach(function(f,i){
+      if(f.classList.contains('ex'))f.classList.toggle('past',i<fi&&i!==lastEx);
+      if(f.classList.contains('say'))f.classList.toggle('past',i<fi&&i!==lastSay);
+    });
+    // marcas coloridas: frags com data-mark acendem os [data-m] da cena
+    // data-marks-current: só a etapa atual fica acesa (senão vão acumulando)
+    var lit={},onlyCur=sc.hasAttribute('data-marks-current');
+    fr.forEach(function(f,i){if(i<fi&&f.getAttribute('data-mark')){if(onlyCur)lit={};f.getAttribute('data-mark').split(' ').forEach(function(m){lit[m]=1})}});
+    [].forEach.call(sc.querySelectorAll('[data-m]'),function(el){el.classList.toggle('lit',!!lit[el.getAttribute('data-m')])});
+
+    var code=sc.querySelector('pre.hl');
+    if(code&&sc.querySelector('.ex')){
+      var spec=lastEx>=0?fr[lastEx].getAttribute('data-lines'):null;
+      code.classList.toggle('focus',!!spec);
+      var on=parseLines(spec);
+      [].forEach.call(code.querySelectorAll('.ln'),function(l,i){l.classList.toggle('on',!!on[i+1])});
+    }
+
+    // simulador
+    if(sc._sim){
+      var steps=[];fr.forEach(function(f,i){if(i<fi&&f.classList.contains('step'))steps.push(f.textContent.trim())});
+      var lastIsStep=fi>0&&fr[fi-1]&&fr[fi-1].classList.contains('step');
+      sc._sim.sync(steps,!!fwd&&!changed&&lastIsStep);
+    }
+
+    var done=0;for(var k=0;k<si;k++)done+=totals[k];done+=fi;
+    document.getElementById('prog').style.width=(done/grand*100)+'%';
+    document.getElementById('count').textContent=(si+1)+' / '+scenes.length;
+    document.getElementById('scenetag').textContent='Parte '+sc._part+' · '+String(si+1).padStart(2,'0')+' · '+sc.getAttribute('data-name');
+    if(sc._part!==curPart){curPart=sc._part;if(t0)partT0=Date.now()}
+    tick();
+    try{history.replaceState(null,'','#'+(si+1)+'.'+fi)}catch(e){}
+  }
+  // cronômetro (tecla T): começa no primeiro avanço
+  var t0=null,partT0=null,curPart=null,timerEl=document.getElementById('timer');
+  function mmss(ms){var s=Math.floor(ms/1000);return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')}
+  function tick(){
+    if(!timerEl.classList.contains('show'))return;
+    var now=Date.now();
+    timerEl.innerHTML='Parte <b>'+curPart+'</b> · '+(partT0?mmss(now-partT0):'00:00')+' &nbsp;|&nbsp; total '+(t0?mmss(now-t0):'00:00');
+  }
+  setInterval(tick,1000);
+  function next(){
+    if(!t0){t0=partT0=Date.now()}
+    var sc=scenes[si];
+    if(sc._sim&&sc._sim.busy){sc._sim.finish();return}
+    if(fi<frags(sc).length){fi++;render(true)}
+    else if(si<scenes.length-1){si++;fi=1;render(false)}
+  }
+  function prev(){
+    if(fi>1){fi--}
+    else if(si>0){si--;fi=frags(scenes[si]).length}
+    render(false);
+  }
+  function go(idx){si=Math.max(0,Math.min(scenes.length-1,idx));fi=1;render(false)}
+  function end(){si=scenes.length-1;fi=frags(scenes[si]).length;render(false)}
+
+  // teclado
+  document.addEventListener('keydown',function(e){
+    var tg=e.target;
+    if(tg&&(tg.tagName==='TEXTAREA'||tg.tagName==='INPUT')){if(e.key==='Escape')tg.blur();return}
+    var k=e.key;
+    if(k==='ArrowRight'||k===' '||k==='PageDown'||k==='Enter'){e.preventDefault();next()}
+    else if(k==='ArrowLeft'||k==='PageUp'||k==='Backspace'){e.preventDefault();prev()}
+    else if(k==='f'||k==='F'){toggleFull()}
+    else if(k==='o'||k==='O'){toggleOv()}
+    else if(k==='t'||k==='T'){timerEl.classList.toggle('show');tick()}
+    else if(k==='Home'){go(0)}
+    else if(k==='End'){end()}
+    else if(k==='?'){toggle('help')}
+    else if(k==='Escape'){closeAll();setCtrls(false)}
+  });
+  document.getElementById('stage').addEventListener('click',function(e){
+    if(e.target.closest('.noclick'))return;
+    next();
+  });
+
+  function toggleFull(){
+    if(!document.fullscreenElement){(document.documentElement.requestFullscreen||function(){}).call(document.documentElement)}
+    else{(document.exitFullscreen||function(){}).call(document)}
+  }
+  function toggle(id){document.getElementById(id).classList.toggle('show')}
+  function closeAll(){[].forEach.call(document.querySelectorAll('.ovl'),function(o){o.classList.remove('show')})}
+
+  // mapa de cenas
+  var ovGrid=document.querySelector('#ov .grid');
+  scenes.forEach(function(s,i){
+    var b=document.createElement('button');
+    b.textContent=String(i+1).padStart(2,'0')+' · '+s.getAttribute('data-name');
+    b.setAttribute('data-part',s._part);
+    b.addEventListener('click',function(e){e.stopPropagation();closeAll();go(i)});
+    ovGrid.appendChild(b);
+  });
+  function toggleOv(){
+    [].forEach.call(ovGrid.children,function(b,i){b.classList.toggle('cur',i===si)});
+    toggle('ov');
+  }
+
+  // controles escondidos: o botãozinho no canto inferior esquerdo abre/fecha
+  var ctrls=document.getElementById('controls'),navbtn=document.getElementById('navbtn'),idleT,tagT;
+  function setCtrls(on){ctrls.classList.toggle('show',on);navbtn.classList.toggle('on',on)}
+  navbtn.addEventListener('click',function(e){e.stopPropagation();setCtrls(!ctrls.classList.contains('show'));navbtn.blur()});
+  document.addEventListener('mousemove',function(e){
+    document.body.classList.remove('idle');clearTimeout(idleT);
+    idleT=setTimeout(function(){document.body.classList.add('idle')},3500);
+    var tag=document.getElementById('scenetag');
+    tag.classList.add('show');clearTimeout(tagT);tagT=setTimeout(function(){tag.classList.remove('show')},2200);
+  });
+  function btn(id,fn){document.getElementById(id).addEventListener('click',function(e){e.stopPropagation();fn()})}
+  btn('btnNext',next);btn('btnPrev',prev);btn('btnFull',toggleFull);btn('btnHelp',function(){toggle('help')});btn('btnMap',toggleOv);
+  [].forEach.call(document.querySelectorAll('.ovl'),function(o){
+    o.addEventListener('click',function(){o.classList.remove('show')});
+    o.querySelector('.box').addEventListener('click',function(e){e.stopPropagation()});
+  });
+
+  // playground
+  [].forEach.call(document.querySelectorAll('.pg'),function(pg){
+    var sc=pg.closest('.scene'),ta=pg.querySelector('textarea'),why=sc.querySelector('.pg-why'),why0=why.innerHTML,pend=null;
+    function runIt(){
+      var cmd=ta.value.trim();if(!cmd)return;
+      sc._sim.play(cmd,false);ta.value='';
+      // botão vermelho: explica o erro clássico depois de rodar
+      var w=pend&&pend.cmd===cmd?pend.why:null;pend=null;
+      why.classList.toggle('bad',!!w);why.innerHTML=w||why0;
+    }
+    ta.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();runIt()}});
+    pg.querySelector('button.send').addEventListener('click',function(){runIt();ta.focus()});
+    [].forEach.call(pg.querySelectorAll('button[data-cmd]'),function(b){
+      b.addEventListener('click',function(){
+        ta.value=b.getAttribute('data-cmd');ta.focus();
+        pend=b.hasAttribute('data-why')?{cmd:ta.value,why:b.getAttribute('data-why')}:null;
+      });
+    });
+  });
+
+  // F5 não perde o lugar: #cena.passo
+  var h=/^#(\d+)(?:\.(\d+))?$/.exec(location.hash);
+  if(h){si=Math.max(0,Math.min(scenes.length-1,h[1]-1));fi=Math.max(1,Math.min(frags(scenes[si]).length,+(h[2]||1)))}
+  // tela cheia / mudar resolução: reajusta o simulador visível
+  var rzT;
+  window.addEventListener('resize',function(){clearTimeout(rzT);rzT=setTimeout(function(){var s=scenes[si]._sim;if(s&&!s.busy)s.refit()},150)});
+
+  render(false);
+})();
+</script>
+</body>
+</html>
