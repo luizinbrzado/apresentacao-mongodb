@@ -414,6 +414,7 @@ body.idle #navbtn:not(.on){opacity:0}
 .cr-grid.show .cr-card{animation:crFloat 5s ease-in-out infinite}
 .cr-grid.show .cr-card:nth-child(2){animation-delay:-1.2s}.cr-grid.show .cr-card:nth-child(3){animation-delay:-2.5s}
 .cr-grid.show .cr-card:nth-child(4){animation-delay:-3.7s}
+.cr-card:last-child:nth-child(odd){grid-column:1/-1;justify-self:center;width:calc(50% - var(--u)*.7)}
 .cr-nm{display:flex;flex-direction:column;line-height:1.1;min-width:0}
 .cr-nm b{font-size:calc(var(--u)*3.4);color:var(--c)}
 .cr-nm span{font-size:calc(var(--u)*2.2);color:var(--ink);opacity:.85;margin-top:.15em}
@@ -1751,9 +1752,8 @@ db.clientes.insertMany([
     <div class="cr-card" style="--c:var(--green)"><div class="cr-av">LG</div><div class="cr-nm"><b>Luiz Gustavo</b><span>Trindade Neves</span></div></div>
     <div class="cr-card" style="--c:var(--cyan)"><div class="cr-av">SR</div><div class="cr-nm"><b>Samuel</b><span>Ribeiro</span></div></div>
     <div class="cr-card" style="--c:var(--orange)"><div class="cr-av">MC</div><div class="cr-nm"><b>Murilo</b><span>Poltronieri Batista de Campos</span></div></div>
-    <div class="cr-card" style="--c:var(--pink)"><div class="cr-av">GF</div><div class="cr-nm"><b>Gustavo Henrique</b><span>Camargo Felizardo</span></div></div>
   </div>
-  <div class="cr-cmd cr-end frag" data-anim="blur">]) <span class="cr-res">→ { acknowledged: <span class="c-amber">true</span>, insertedCount: <span class="c-cyan">4</span> }</span></div>
+  <div class="cr-cmd cr-end frag" data-anim="blur">]) <span class="cr-res">→ { acknowledged: <span class="c-amber">true</span>, insertedCount: <span class="c-cyan">3</span> }</span></div>
   <div class="cr-fin frag" data-anim="zoom"><span class="glow">Obrigado!</span> <span class="cr-leaf">🍃</span></div>
   <div class="cr-conf" aria-hidden="true"><i>{</i><i>}</i><i>{ }</i><i>🍃</i><i>{</i><i>}</i><i>{ }</i><i>🍃</i><i>{</i><i>}</i><i>{ }</i><i>🍃</i><i>{</i><i>}</i></div>
 </section>

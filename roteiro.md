@@ -346,7 +346,7 @@ Daqui pra frente **não precisa apertar nada**. Chegou em Fontes avançando, o r
 2. **Kahoot** fica 5 segundos.
    > "Já já tem Kahoot, então celular na mão: kahoot.it."
 3. **Equipe** aparece: o comando, os nomes, a resposta do banco e o "Obrigado!".
-   > "E pra fechar, a última inserção do dia: a nossa equipe. Quatro documentos, `insertedCount: 4`. Obrigado!"
+   > "E pra fechar, a última inserção do dia: a nossa equipe. Três documentos, `insertedCount: 3`. Obrigado!"
 
 Depois abre o Kahoot no outro computador ou aba e passa o código.
 
