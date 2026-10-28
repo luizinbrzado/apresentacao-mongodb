@@ -333,7 +333,8 @@ Se sobrar tempo, aponta um ou dois que a gente não mostrou ao vivo, tipo `$in`,
 
 ### 65 · Playground
 - Os botões **verdes** rodam exemplos prontos. Os **vermelhos** rodam os erros clássicos e mostram a explicação.
-- Pode digitar e apertar **Enter** ou **▶ Enviar**.
+- Depois de um vermelho, aparece **🔧 Consertar**: ele desfaz o estrago e roda o comando certo.
+- Pode digitar e apertar **Enter** ou **▶ Enviar**. Se o comando ficar grande, o terminal ganha barra de rolagem.
 - Pede pra turma escolher: "Qual erro vocês querem ver?"
 - Se o tempo tiver curto, pula essa.
 
@@ -344,6 +345,10 @@ Se sobrar tempo, aponta um ou dois que a gente não mostrou ao vivo, tipo `$in`,
 > "E agora: Kahoot! Peguem o celular e entrem em kahoot.it."
 
 Abre o Kahoot no outro computador ou aba e passa o código.
+
+### 68 · Equipe
+Depois do Kahoot. São 4 cliques: o comando, os nomes, a resposta do banco e o "Obrigado!".
+> "E pra fechar, a última inserção do dia: a nossa equipe. Quatro documentos, `insertedCount: 4`. Obrigado!"
 
 ---
 
