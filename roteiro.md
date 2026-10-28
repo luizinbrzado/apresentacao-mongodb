@@ -338,17 +338,21 @@ Se sobrar tempo, aponta um ou dois que a gente não mostrou ao vivo, tipo `$in`,
 - Pede pra turma escolher: "Qual erro vocês querem ver?"
 - Se o tempo tiver curto, pula essa.
 
-### 66 · Fontes
-> "As fontes foram a documentação oficial do MongoDB, o Stack Overflow e o fórum da comunidade."
+### 66 a 68 · Final automático (Fontes → Kahoot → Equipe)
+Daqui pra frente **não precisa apertar nada**. Chegou em Fontes avançando, o resto anda sozinho (~16 segundos):
 
-### 67 · Kahoot
-> "E agora: Kahoot! Peguem o celular e entrem em kahoot.it."
+1. **Fontes** se monta e fica 5 segundos.
+   > "As fontes foram a documentação oficial do MongoDB, o Stack Overflow e o fórum da comunidade."
+2. **Kahoot** fica 5 segundos.
+   > "Já já tem Kahoot, então celular na mão: kahoot.it."
+3. **Equipe** aparece: o comando, os nomes, a resposta do banco e o "Obrigado!".
+   > "E pra fechar, a última inserção do dia: a nossa equipe. Quatro documentos, `insertedCount: 4`. Obrigado!"
 
-Abre o Kahoot no outro computador ou aba e passa o código.
+Depois abre o Kahoot no outro computador ou aba e passa o código.
 
-### 68 · Equipe
-Depois do Kahoot. São 4 cliques: o comando, os nomes, a resposta do banco e o "Obrigado!".
-> "E pra fechar, a última inserção do dia: a nossa equipe. Quatro documentos, `insertedCount: 4`. Obrigado!"
+- Apertar **→** no meio adianta, e a sequência continua dali.
+- Apertar **←** para a sequência. Pra retomar, é só apertar **→**.
+- Se abrir direto numa dessas cenas (F5 ou mapa **O**), ela só começa quando apertar **→**.
 
 ---
 

@@ -1724,7 +1724,7 @@ db.clientes.insertMany([
   </div>
 </section>
 
-<section class="scene" data-accent="green" data-name="Fontes">
+<section class="scene" data-accent="green" data-name="Fontes" data-auto-step="700" data-auto-next="5000">
   <div class="kicker frag" data-anim="left">&gt; referencias()</div>
   <div class="mid frag" data-anim="left">Fontes</div>
   <div class="col frag" data-anim="up" style="gap:.45em">
@@ -1737,7 +1737,7 @@ db.clientes.insertMany([
   </div>
 </section>
 
-<section class="scene mid-center" data-accent="pink" data-name="Kahoot">
+<section class="scene mid-center" data-accent="pink" data-name="Kahoot" data-auto-next="5000">
   <div class="col frag stagger" style="align-items:center">
     <div class="kicker" style="color:var(--pink)">Agora é hora do</div>
     <div class="huge glow" style="--accent:var(--pink)">KAHOOT 🎮</div>
@@ -1745,7 +1745,7 @@ db.clientes.insertMany([
   </div>
 </section>
 
-<section class="scene mid-center credits" data-accent="green" data-name="Equipe">
+<section class="scene mid-center credits" data-accent="green" data-name="Equipe" data-auto-step="1700">
   <div class="cr-cmd frag" data-anim="down"><span class="pr">loja&gt;</span> db.<span class="c-cyan">equipe</span>.<span class="c-amber">insertMany</span>([</div>
   <div class="cr-grid frag stagger">
     <div class="cr-card" style="--c:var(--green)"><div class="cr-av">LG</div><div class="cr-nm"><b>Luiz Gustavo</b><span>Trindade Neves</span></div></div>
@@ -2550,9 +2550,17 @@ SimView.prototype.renderColl=function(anim,hits){
     document.getElementById('scenetag').textContent='Parte '+sc._part+' · '+String(si+1).padStart(2,'0')+' · '+sc.getAttribute('data-name');
     if(sc._part!==curPart){curPart=sc._part;if(t0)partT0=Date.now()}
     tick();
+    // final automático (Fontes → Kahoot → Equipe): só quando se chegou avançando
+    clearTimeout(autoT);
+    if(auto){
+      var step=+sc.getAttribute('data-auto-step'),nxt=+sc.getAttribute('data-auto-next');
+      if(step&&fi<fr.length)autoT=setTimeout(function(){fi++;render(true)},step);
+      else if(nxt&&fi>=fr.length&&si<scenes.length-1)autoT=setTimeout(function(){si++;fi=1;render(false)},nxt);
+    }
     try{history.replaceState(null,'','#'+(si+1)+'.'+fi)}catch(e){}
   }
   // cronômetro (tecla T): começa no primeiro avanço
+  var auto=false,autoT=null;
   var t0=null,partT0=null,curPart=null,timerEl=document.getElementById('timer');
   function mmss(ms){var s=Math.floor(ms/1000);return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')}
   function tick(){
@@ -2563,18 +2571,20 @@ SimView.prototype.renderColl=function(anim,hits){
   setInterval(tick,1000);
   function next(){
     if(!t0){t0=partT0=Date.now()}
+    auto=true;
     var sc=scenes[si];
     if(sc._sim&&sc._sim.busy){sc._sim.finish();return}
     if(fi<frags(sc).length){fi++;render(true)}
     else if(si<scenes.length-1){si++;fi=1;render(false)}
   }
   function prev(){
+    auto=false;
     if(fi>1){fi--}
     else if(si>0){si--;fi=frags(scenes[si]).length}
     render(false);
   }
-  function go(idx){si=Math.max(0,Math.min(scenes.length-1,idx));fi=1;render(false)}
-  function end(){si=scenes.length-1;fi=frags(scenes[si]).length;render(false)}
+  function go(idx){auto=false;si=Math.max(0,Math.min(scenes.length-1,idx));fi=1;render(false)}
+  function end(){auto=false;si=scenes.length-1;fi=frags(scenes[si]).length;render(false)}
 
   // teclado
   document.addEventListener('keydown',function(e){
