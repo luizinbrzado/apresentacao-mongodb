@@ -381,6 +381,11 @@ body.idle #navbtn:not(.on){opacity:0}
 .pgscene .pg button{font-size:calc(var(--u)*1.15);padding:.2em .6em}
 .pgscene .pg button.send{font-size:calc(var(--u)*1.6);padding:0 .9em}
 .pgscene .pg .chs{gap:calc(var(--u)*.35)}
+/* playground: terminal e collection com barra de rolagem (comando grande não some) */
+.sim.play .scr,.sim.play .docs{overflow:auto;scrollbar-width:auto;scrollbar-color:color-mix(in srgb,var(--accent) 55%,#1c2636) #0b1019}
+.sim.play .scr::-webkit-scrollbar,.sim.play .docs::-webkit-scrollbar{width:calc(var(--u)*1.1);height:calc(var(--u)*1.1)}
+.sim.play .scr::-webkit-scrollbar-track,.sim.play .docs::-webkit-scrollbar-track{background:#0b1019}
+.sim.play .scr::-webkit-scrollbar-thumb,.sim.play .docs::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--accent) 55%,#1c2636);border-radius:99px;border:3px solid #0b1019}
 #ov button[data-part="1"]{border-left:4px solid var(--green)}
 #ov button[data-part="2"]{border-left:4px solid var(--cyan)}
 #ov button[data-part="3"]{border-left:4px solid var(--orange)}
@@ -1629,7 +1634,7 @@ db.pedidos.updateOne({ _id: 1045 },
 </section>
 
 <section class="scene pgscene" data-accent="green" data-name="Playground">
-  <div class="sim play" data-coll="produtos" data-mode="docs"></div>
+  <div class="sim play noclick" data-coll="produtos" data-mode="docs"></div>
   <script type="text/plain" class="setup">
 db.produtos.insertMany([
   { _id: "SKU-101", nome: "Fone", preco: NumberDecimal("89.90"), estoque: 37, tags: ["audio"] },
@@ -2328,7 +2333,7 @@ SimView.prototype.play=function(cmd,fast){
   var shown=-1;
   function frame(t){
     var k=Math.max(0,Math.min(total,Math.ceil((t-t0)/dur*total)));
-    if(k!==shown){shown=k;line.innerHTML=PROMPT+hl(cmd.slice(0,k))+'<span class="cur"></span>'}
+    if(k!==shown){shown=k;line.innerHTML=PROMPT+hl(cmd.slice(0,k))+'<span class="cur"></span>';self.scr.scrollTop=self.scr.scrollHeight}
     // pausa curta depois de digitar, aí mostra o resultado
     if(t-t0<dur+280)self.raf=requestAnimationFrame(frame);
     else done();
