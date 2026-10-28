@@ -370,6 +370,12 @@ body.idle #navbtn:not(.on){opacity:0}
 .pg-why.bad{border-left-color:var(--pink);color:var(--ink)}
 .pg-why.bad b{color:var(--pink)}.pg-why em{font-style:normal;color:var(--green);font-weight:700}
 .pg-why code{font-family:var(--mono);background:#141c2b;padding:0 .3em;border-radius:.25em}
+.pg-why.ok{border-left-color:var(--green);color:var(--ink)}
+.pg-why.ok b{color:var(--green)}
+.pg-why:has(.fix){display:flex;align-items:center;gap:.8em}
+.pg-why .fix{flex:none;margin-left:auto;white-space:nowrap;font-family:var(--disp);font-weight:700;font-size:.9em;color:#021a0c;background:var(--green);
+  border:0;border-radius:.4em;padding:.15em .7em;cursor:pointer;box-shadow:0 0 24px color-mix(in srgb,var(--green) 45%,transparent)}
+.pg-why .fix:hover{filter:brightness(1.12)}
 /* tela do playground: sem título, terminal e collection ocupam quase tudo */
 .scene.pgscene{padding:calc(var(--u)*1.4) calc(var(--u)*2);gap:calc(var(--u)*.9);justify-content:flex-start}
 .sim.play{height:auto;flex:1 1 auto;grid-template-columns:1.1fr 1fr;--tfs:2.3;--cfs:2.2}
@@ -1656,14 +1662,22 @@ db.clientes.insertMany([
       <button data-cmd='db.produtos.updateOne({ _id: "SKU-101" }, { $inc: { estoque: -1 } })'>$inc</button>
       <button data-cmd='db.produtos.insertOne({ nome: "Mouse", preco: NumberDecimal("59.90") })'>insertOne</button>
       <button data-cmd='db.produtos.updateMany({}, { $addToSet: { tags: "black-friday" } })'>$addToSet</button>
-      <button class="bad" data-cmd='db.produtos.updateOne({ _id: "SKU-101" }, { estoque: 10 })' data-why='<b>Erro 1:</b> update sem operador. O mongosh recusa. ✔ <em>{ $set: { estoque: 10 } }</em>'>sem $set</button>
-      <button class="bad" data-cmd='db.clientes.find({ _id: "65f1c2a9e4b0a1b2c3d4e5f6" })' data-why='<b>Erro 2:</b> o _id é ObjectId, não texto → <b>[ ]</b>. ✔ <em>ObjectId("65f1…e5f6")</em>'>_id texto</button>
-      <button class="bad" data-cmd='db.clientes.updateOne({ nome: "Marina" }, { $set: { endereco: { cidade: "Recife" } } })' data-why='<b>Erro 3:</b> trocou o subdocumento inteiro, o <b>uf sumiu</b>. ✔ <em>{ $set: { "endereco.cidade": "Recife" } }</em>'>$set subdoc</button>
-      <button class="bad" data-cmd='db.produtos.updateOne({}, { $set: { promo: true } })' data-why='<b>Erro 4:</b> updateOne com filtro vazio muda <b>só o 1º</b>. ✔ <em>updateMany</em>'>updateOne({})</button>
-      <button class="bad" data-cmd='db.produtos.find({ preco: { $gt: 50 }, preco: { $lt: 100 } })' data-why='<b>Erro 5:</b> chave repetida — só o <b>$lt: 100</b> valeu (veio a camiseta de 49,90). ✔ <em>{ preco: { $gt: 50, $lt: 100 } }</em>'>chave dupla</button>
-      <button class="bad" data-cmd='db.produtos.find({ estoque: { $gt: "10" } })' data-why='<b>Erro 6:</b> "10" é texto; número nunca é maior que texto → <b>[ ]</b>. ✔ <em>$gt: 10</em>'>"10" texto</button>
-      <button class="bad" data-cmd='db.produtos.updateOne({ _id: "SKU-101" }, { $push: { tags: ["bf", "promo"] } })' data-why='<b>Erro 7:</b> virou <b>array dentro de array</b>. ✔ <em>{ $push: { tags: { $each: ["bf", "promo"] } } }</em>'>$push array</button>
-      <button class="bad" data-cmd='db.clientes.find({ telefone: null })' data-why='<b>Erro 8:</b> trouxe o Caio (null) <b>e o João (sem o campo)</b>. ✔ <em>{ telefone: { $exists: false } }</em>'>null</button>
+      <button class="bad" data-cmd='db.produtos.updateOne({ _id: "SKU-101" }, { estoque: 10 })' data-why='<b>Erro 1:</b> update sem operador. O mongosh recusa. ✔ <em>{ $set: { estoque: 10 } }</em>'
+        data-fix='db.produtos.updateOne({ _id: "SKU-101" }, { $set: { estoque: 10 } })' data-ok='com <em>$set</em>, só o estoque mudou. O resto do documento ficou.'>sem $set</button>
+      <button class="bad" data-cmd='db.clientes.find({ _id: "65f1c2a9e4b0a1b2c3d4e5f6" })' data-why='<b>Erro 2:</b> o _id é ObjectId, não texto → <b>[ ]</b>. ✔ <em>ObjectId("65f1…e5f6")</em>'
+        data-fix='db.clientes.find({ _id: ObjectId("65f1c2a9e4b0a1b2c3d4e5f6") })' data-ok='com <em>ObjectId(…)</em>, achou a Marina.'>_id texto</button>
+      <button class="bad" data-cmd='db.clientes.updateOne({ nome: "Marina" }, { $set: { endereco: { cidade: "Recife" } } })' data-why='<b>Erro 3:</b> trocou o subdocumento inteiro, o <b>uf sumiu</b>. ✔ <em>{ $set: { "endereco.cidade": "Recife" } }</em>'
+        data-fix='db.clientes.updateOne({ nome: "Marina" }, { $set: { "endereco.cidade": "Recife" } })' data-ok='com <em>"endereco.cidade"</em>, só a cidade mudou e o <b>uf</b> continua lá.'>$set subdoc</button>
+      <button class="bad" data-cmd='db.produtos.updateOne({}, { $set: { promo: true } })' data-why='<b>Erro 4:</b> updateOne com filtro vazio muda <b>só o 1º</b>. ✔ <em>updateMany</em>'
+        data-fix='db.produtos.updateMany({}, { $set: { promo: true } })' data-ok='<em>updateMany</em> marcou todos os produtos.'>updateOne({})</button>
+      <button class="bad" data-cmd='db.produtos.find({ preco: { $gt: 50 }, preco: { $lt: 100 } })' data-why='<b>Erro 5:</b> chave repetida — só o <b>$lt: 100</b> valeu (veio a camiseta de 49,90). ✔ <em>{ preco: { $gt: 50, $lt: 100 } }</em>'
+        data-fix='db.produtos.find({ preco: { $gt: 50, $lt: 100 } })' data-ok='as duas condições na <em>mesma chave</em> → só o que custa entre 50 e 100.'>chave dupla</button>
+      <button class="bad" data-cmd='db.produtos.find({ estoque: { $gt: "10" } })' data-why='<b>Erro 6:</b> "10" é texto; número nunca é maior que texto → <b>[ ]</b>. ✔ <em>$gt: 10</em>'
+        data-fix='db.produtos.find({ estoque: { $gt: 10 } })' data-ok='<em>10</em> sem aspas: número com número, agora compara certo.'>"10" texto</button>
+      <button class="bad" data-cmd='db.produtos.updateOne({ _id: "SKU-101" }, { $push: { tags: ["bf", "promo"] } })' data-why='<b>Erro 7:</b> virou <b>array dentro de array</b>. ✔ <em>{ $push: { tags: { $each: ["bf", "promo"] } } }</em>'
+        data-fix='db.produtos.updateOne({ _id: "SKU-101" }, { $push: { tags: { $each: ["bf", "promo"] } } })' data-ok='com <em>$each</em>, cada item entrou solto no array.'>$push array</button>
+      <button class="bad" data-cmd='db.clientes.find({ telefone: null })' data-why='<b>Erro 8:</b> trouxe o Caio (null) <b>e o João (sem o campo)</b>. ✔ <em>{ telefone: { $exists: false } }</em>'
+        data-fix='db.clientes.find({ telefone: { $exists: false } })' data-ok='<em>$exists: false</em> → só o João, que não tem o campo.'>null</button>
     </div>
   </div>
 </section>
@@ -1982,6 +1996,14 @@ var Mongo=(function(){
     var r='';for(var i=0;i<10;i++)r+=Math.floor(this.rand()*16).toString(16);
     this.proc=r;this.counter=Math.floor(this.rand()*0xffff00);this.t=0;
   };
+  // cópia das collections (transação e o "consertar" do playground)
+  Engine.prototype.save=function(){
+    var o={},self=this;
+    Object.keys(this.colls).forEach(function(k){var c=self.colls[k];
+      o[k]={name:c.name,docs:c.docs.map(clone),validator:c.validator,level:c.level,action:c.action,uniq:c.uniq.slice()}});
+    return o;
+  };
+  Engine.prototype.load=function(s){this.colls=s};
   Engine.prototype.rand=function(){this.seed=(this.seed*1103515245+12345)%2147483648;return this.seed/2147483648};
   Engine.prototype.oid=function(){
     this.t++;this.counter=(this.counter+1)%0xffffff;
@@ -2152,9 +2174,7 @@ var Mongo=(function(){
       getDatabase:function(){return self.db()},
       startTransaction:function(){
         if(self.snapshot)throw new MErr('MongoServerError','Transaction already in progress on this session.');
-        self.snapshot={};
-        Object.keys(self.colls).forEach(function(k){var c=self.colls[k];
-          self.snapshot[k]={name:c.name,docs:c.docs.map(clone),validator:c.validator,level:c.level,action:c.action,uniq:c.uniq.slice()}});
+        self.snapshot=self.save();
       },
       commitTransaction:function(){
         if(!self.snapshot)throw new MErr('MongoServerError','No transaction started');
@@ -2564,17 +2584,25 @@ SimView.prototype.renderColl=function(anim,hits){
     var sc=pg.closest('.scene'),ta=pg.querySelector('textarea'),why=sc.querySelector('.pg-why'),why0=why.innerHTML,pend=null;
     function runIt(){
       var cmd=ta.value.trim();if(!cmd)return;
+      // botão vermelho: guarda o estado de antes, pra o "consertar" desfazer o estrago
+      var b=pend&&pend.cmd===cmd?pend:null;pend=null;
+      var before=b?sc._sim.eng.save():null;
       sc._sim.play(cmd,false);ta.value='';
-      // botão vermelho: explica o erro clássico depois de rodar
-      var w=pend&&pend.cmd===cmd?pend.why:null;pend=null;
-      why.classList.toggle('bad',!!w);why.innerHTML=w||why0;
+      why.classList.remove('ok');why.classList.toggle('bad',!!b);
+      why.innerHTML=b?'<span>'+b.why+'</span><button class="fix">🔧 Consertar</button>':why0;
+      if(b)why.querySelector('.fix').addEventListener('click',function(){
+        sc._sim.eng.load(before);
+        sc._sim.play(b.fix,false);ta.focus();
+        why.classList.remove('bad');why.classList.add('ok');
+        why.innerHTML='<b>✔ Consertado:</b> '+b.ok;
+      });
     }
     ta.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();runIt()}});
     pg.querySelector('button.send').addEventListener('click',function(){runIt();ta.focus()});
     [].forEach.call(pg.querySelectorAll('button[data-cmd]'),function(b){
       b.addEventListener('click',function(){
         ta.value=b.getAttribute('data-cmd');ta.focus();
-        pend=b.hasAttribute('data-why')?{cmd:ta.value,why:b.getAttribute('data-why')}:null;
+        pend=b.hasAttribute('data-why')?{cmd:ta.value,why:b.getAttribute('data-why'),fix:b.getAttribute('data-fix'),ok:b.getAttribute('data-ok')}:null;
       });
     });
   });
