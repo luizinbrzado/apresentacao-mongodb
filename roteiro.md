@@ -34,7 +34,7 @@ Roteiro pra quem vai apresentar. Não precisa decorar: lê o que tá entre aspas
 |---|---|---|---|
 | **1** | 1 – 20 | Abertura, conceitos e Inserção | ~14 min |
 | **2** | 21 – 43 | Alteração | ~13 min |
-| **3** | 44 – 67 | Schemas, cola, erros, playground e Kahoot | ~10 min (+ playground) |
+| **3** | 44 – 69 | Schemas, cola, erros, playground e Kahoot | ~10 min (+ playground) |
 
 Na hora de trocar, quem sai fala a frase de passagem que tá no fim da parte dele.
 
@@ -331,14 +331,18 @@ Se sobrar tempo, aponta um ou dois que a gente não mostrou ao vivo, tipo `$in`,
 ### 64 · Playground · abertura
 > "Agora é com vocês. Tem um terminal aqui que roda comando de verdade no simulador."
 
-### 65 · Playground
+### 65 · Playground · o banco
+> "Antes de testar, esse é o banco que vocês vão mexer: a collection **produtos**, com o fone, a air fryer e a camiseta, e a collection **clientes**. Reparem que o João nem tem telefone e o Caio tem telefone `null`. Isso vai aparecer num dos erros."
+
+### 66 · Playground
+- A tela da direita mostra **uma collection por vez**. Quando um comando mexe em outra, ela troca sozinha. Pra escolher na mão, usa o menu **loja.produtos ▾** em cima dos documentos.
 - Os botões **verdes** rodam exemplos prontos. Os **vermelhos** rodam os erros clássicos e mostram a explicação.
 - Depois de um vermelho, aparece **🔧 Consertar**: ele desfaz o estrago e roda o comando certo.
 - Pode digitar e apertar **Enter** ou **▶ Enviar**. Se o comando ficar grande, o terminal ganha barra de rolagem.
 - Pede pra turma escolher: "Qual erro vocês querem ver?"
 - Se o tempo tiver curto, pula essa.
 
-### 66 a 68 · Final automático (Fontes → Kahoot → Equipe)
+### 67 a 69 · Final automático (Fontes → Kahoot → Equipe)
 Daqui pra frente **não precisa apertar nada**. Chegou em Fontes avançando, o resto anda sozinho (~16 segundos):
 
 1. **Fontes** se monta e fica 5 segundos.
@@ -362,7 +366,7 @@ Dá pra pular sem perder a história:
 
 - **Parte 1:** cena 9 (0.1 + 0.2) e cena 13 (ObjectId).
 - **Parte 2:** cenas 31 e 32 (bulkWrite) — vai direto da 30 pra 33.
-- **Parte 3:** cola (55–61) bem rápida e o playground (64–65).
+- **Parte 3:** cola (55–61) bem rápida e o playground (64–66).
 
 Pra pular, aperta **O** e clica na cena.
 

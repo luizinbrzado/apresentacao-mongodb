@@ -392,6 +392,19 @@ body.idle #navbtn:not(.on){opacity:0}
 .sim.play .scr::-webkit-scrollbar,.sim.play .docs::-webkit-scrollbar{width:calc(var(--u)*1.1);height:calc(var(--u)*1.1)}
 .sim.play .scr::-webkit-scrollbar-track,.sim.play .docs::-webkit-scrollbar-track{background:#0b1019}
 .sim.play .scr::-webkit-scrollbar-thumb,.sim.play .docs::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--accent) 55%,#1c2636);border-radius:99px;border:3px solid #0b1019}
+/* playground: menu pra escolher a collection */
+.coll .bar select.lbl{font:inherit;font-family:var(--mono);font-weight:700;color:var(--ink);color-scheme:dark;cursor:pointer;
+  background:#0b1019;border:1px solid var(--line);border-radius:.4em;padding:.15em .5em}
+.coll .bar select.lbl:hover,.coll .bar select.lbl:focus{border-color:var(--accent);outline:none}
+.coll .bar select.lbl option{background:#0d1117;color:var(--ink)}
+/* banco completo antes do playground: uma faixa por collection, documentos lado a lado */
+.scene.dbscene{gap:calc(var(--u)*1.2);justify-content:center}
+.dbview{display:flex;flex-direction:column;gap:calc(var(--u)*1.1)}
+.dbscene .note{font-size:calc(var(--u)*2)}
+.dbview .coll .bar{font-size:calc(var(--u)*1.5)}
+.dbview .docs{flex-direction:row;align-items:stretch;font-size:calc(var(--u)*1.5);padding:.5em}
+.dbview .doc{flex:1 1 0;min-width:0}
+.dbview .none{color:#56647a;font-style:italic}
 /* créditos: a equipe "inserida" na collection */
 .credits{gap:calc(var(--u)*1.6);overflow:hidden;isolation:isolate}
 .cr-cmd{font-family:var(--mono);font-size:calc(var(--u)*2.6);color:var(--mut);align-self:center}
@@ -1682,6 +1695,12 @@ db.pedidos.updateOne({ _id: 1045 },
   <div class="note frag" data-anim="blur">Enter ou ▶ Enviar roda · os botões <span class="c-pink">vermelhos</span> são erros clássicos</div>
 </section>
 
+<section class="scene dbscene" data-accent="green" data-name="Playground · o banco">
+  <div class="kicker frag" data-anim="down">O banco do playground · <span class="c-cyan">loja</span></div>
+  <div class="dbview frag stagger" data-from="Playground"></div>
+  <div class="note frag" data-anim="blur">Tudo começa assim. No playground, o menu <b class="c-green">loja.produtos ▾</b> troca a collection.</div>
+</section>
+
 <section class="scene pgscene" data-accent="green" data-name="Playground">
   <div class="sim play noclick" data-coll="produtos" data-mode="docs"></div>
   <script type="text/plain" class="setup">
@@ -2332,10 +2351,25 @@ function SimView(el,scene){
   var f=el.getAttribute('data-fields');this.fields=f?f.split(','):null;
   this.setup=[].slice.call(scene.querySelectorAll('script.setup')).map(function(s){return s.textContent});
   el.innerHTML='<div class="term"><div class="bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="lbl">mongosh · loja (simulador)</span></div><div class="scr"></div></div>'+
-    '<div class="coll'+(this.mode==='chips'?' chips':'')+(el.classList.contains('play')?' scroll':'')+'"><div class="bar"><span class="lbl">loja.'+this.collName+'</span><span class="cnt"></span></div><div class="docs"></div></div>';
+    '<div class="coll'+(this.mode==='chips'?' chips':'')+(el.classList.contains('play')?' scroll':'')+'"><div class="bar">'+
+    (el.classList.contains('play')?'<select class="lbl" title="Escolher a collection"></select>':'<span class="lbl">loja.'+this.collName+'</span>')+
+    '<span class="cnt"></span></div><div class="docs"></div></div>';
   this.scr=el.querySelector('.scr');this.docsEl=el.querySelector('.docs');this.cnt=el.querySelector('.cnt');
   this.n=-1;this.snap={};this.busy=false;
+  // playground: o menu escolhe qual collection aparece
+  this.sel=el.querySelector('select.lbl');
+  var self=this;
+  if(this.sel)this.sel.addEventListener('change',function(){self.setColl(self.sel.value);self.renderColl(false,[]);self.sel.blur()});
 }
+SimView.prototype.syncSel=function(){
+  var names=Object.keys(this.eng.colls);if(names.indexOf(this.collName)<0)names.push(this.collName);
+  var self=this;
+  this.sel.innerHTML=names.map(function(n){
+    var c=self.eng.colls[n],k=c?c.docs.length:0;
+    return '<option value="'+esc(n)+'">loja.'+esc(n)+' ('+k+')</option>';
+  }).join('');
+  this.sel.value=this.collName;
+};
 SimView.prototype.cols=function(){
   var fs=parseFloat(getComputedStyle(this.scr).fontSize)||20;
   return Math.max(24,Math.floor((this.scr.clientWidth-fs*1.8)/(fs*0.6))-1);
@@ -2385,7 +2419,8 @@ SimView.prototype.rebuild=function(steps){
 SimView.prototype.setColl=function(name){
   if(!name||name===this.collName)return;
   this.collName=name;this.snap={};
-  this.el.querySelector('.coll .lbl').textContent='loja.'+name;
+  if(this.sel)this.syncSel();
+  else this.el.querySelector('.coll .lbl').textContent='loja.'+name;
 };
 SimView.prototype.play=function(cmd,fast){
   this.cancel();
@@ -2424,6 +2459,7 @@ SimView.prototype.leave=function(){this.cancel();this.n=-1};
 SimView.prototype.renderColl=function(anim,hits){
   var c=this.eng.colls[this.collName],docs=c?c.docs:[],prev=this.snap,next={},html='',fields=this.fields;
   hits=hits||[];
+  if(this.sel)this.syncSel();
   this.cnt.textContent=docs.length+(docs.length===1?' documento':' documentos');
   if(!docs.length){this.docsEl.innerHTML='<div class="empty">(coleção vazia)</div>';this.snap={};return}
   if(this.mode==='table'){
@@ -2480,6 +2516,20 @@ SimView.prototype.renderColl=function(anim,hits){
   [].forEach.call(document.querySelectorAll('.ci code'),function(c){c.innerHTML=hl(c.textContent)});
   // simuladores
   scenes.forEach(function(s){var el=s.querySelector('.sim');if(el)s._sim=new SimView(el,s)});
+  // banco completo: roda o setup da cena indicada e mostra todas as collections
+  [].forEach.call(document.querySelectorAll('.dbview'),function(el){
+    var src=scenes.filter(function(s){return s.getAttribute('data-name')===el.getAttribute('data-from')})[0],eng=new Mongo.Engine();
+    [].forEach.call(src.querySelectorAll('script.setup'),function(s){eng.exec(s.textContent,true)});
+    el.innerHTML=Object.keys(eng.colls).map(function(n){
+      var docs=eng.colls[n].docs;
+      return '<div class="coll"><div class="bar"><span class="lbl">loja.'+esc(n)+'</span><span class="cnt">'+docs.length+(docs.length===1?' documento':' documentos')+'</span></div><div class="docs">'+
+        docs.map(function(d){
+          return '<div class="doc">'+Object.keys(d).map(function(k){
+            return '<span class="f"><span class="t-k">'+esc(k)+'</span><span class="t-p">: </span>'+vh(d[k])+'</span>';
+          }).join('')+'</div>';
+        }).join('')+'</div></div>';
+    }).join('');
+  });
   // parte de cada integrante: começa no divisor marcado com data-part
   var part='1';scenes.forEach(function(s){part=s.getAttribute('data-part')||part;s._part=part});
 
@@ -2589,7 +2639,7 @@ SimView.prototype.renderColl=function(anim,hits){
   // teclado
   document.addEventListener('keydown',function(e){
     var tg=e.target;
-    if(tg&&(tg.tagName==='TEXTAREA'||tg.tagName==='INPUT')){if(e.key==='Escape')tg.blur();return}
+    if(tg&&(tg.tagName==='TEXTAREA'||tg.tagName==='INPUT'||tg.tagName==='SELECT')){if(e.key==='Escape')tg.blur();return}
     var k=e.key;
     if(k==='ArrowRight'||k===' '||k==='PageDown'||k==='Enter'){e.preventDefault();next()}
     else if(k==='ArrowLeft'||k==='PageUp'||k==='Backspace'){e.preventDefault();prev()}
